@@ -1,0 +1,3956 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MidSequer2+</title>
+<style>
+  :root{
+    --bg-0:#14161b;
+    --bg-1:#1c1f26;
+    --bg-2:#252932;
+    --line:#333846;
+    --line-soft:#2a2e38;
+    --accent:#5ec8b8;
+    --accent-dim:#3a8f83;
+    --danger:#e2564f;
+    --rec:#d8433c;
+    --text:#e9ecf1;
+    --text-dim:#8b91a1;
+    --key-white:#eef0f4;
+    --key-black:#20222a;
+    --note-1:#5ec8b8;
+    --note-2:#e2a24f;
+    --note-ghost:rgba(255,255,255,.10);
+    --row-a:#20232b;
+    --row-b:#242832;
+    font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg-0);color:var(--text);overflow:hidden;overscroll-behavior:none;}
+  button{font-family:inherit;color:inherit;background:none;border:none;}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ---------- Top bars ---------- */
+  #topbar1{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-1);border-bottom:1px solid var(--line);}
+  .iconbtn{width:40px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-2);border-radius:6px;font-size:18px;}
+  .iconbtn:active{background:var(--line);}
+  #tempoLabel{font-size:15px;color:var(--text-dim);flex:0 0 auto;padding:0 6px;white-space:nowrap;}
+  #trackGrid{margin-left:auto;display:grid;grid-template-columns:repeat(8,10px);grid-template-rows:repeat(2,10px);gap:2px;padding:6px;background:var(--bg-2);border-radius:6px;touch-action:none;}
+  #trackGrid div{background:#3a3f4c;border-radius:1px;}
+  #trackGrid div.active{background:var(--rec);}
+
+  #topbar2{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg-1);border-bottom:1px solid var(--line);font-size:13px;color:var(--text-dim);}
+  #timesigLabel{color:var(--accent);font-weight:600;}
+  #gridDivBtn{margin-left:auto;}
+  #showOtherTracksBtn[data-mode="dim"]{background:var(--accent-dim);color:#fff;}
+  #showOtherTracksBtn[data-mode="full"]{background:var(--accent);color:#0a0a0a;}
+  #pitchCurveBtn.active{background:var(--accent-dim);color:#fff;}
+
+  /* ---------- Piano roll ---------- */
+  #rollWrap{flex:1;position:relative;overflow:hidden;background:var(--bg-0);}
+  #flagStrip{position:absolute;top:0;left:var(--keyw,140px);right:21px;height:20px;background:var(--bg-2);border-bottom:1px solid var(--line);overflow:hidden;touch-action:none;}
+  #rollScroll{position:absolute;top:20px;left:0;right:0;bottom:0;overflow:hidden;}
+  canvas{display:block;touch-action:none;}
+  #kbCanvas{position:absolute;left:0;top:0;z-index:3;}
+  #gridCanvas{position:absolute;left:var(--keyw,140px);top:0;z-index:1;}
+  #pitchOverlay{position:absolute;left:var(--keyw,140px);top:0;z-index:2;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);background:rgba(18,20,26,.18);touch-action:none;}
+  #pitchOverlay.hidden{display:none;}
+  #pitchCanvas{display:block;}
+  #flagCanvas{position:absolute;left:0;top:0;height:20px;width:100%;}
+
+  #vScrollTrack{position:absolute;right:0;top:20px;bottom:0;width:21px;background:var(--bg-1);z-index:4;touch-action:none;}
+  #vScrollThumb{position:absolute;left:1px;right:1px;background:#454b5c;border-radius:6px;}
+  #hScrollTrack{position:absolute;left:var(--keyw,140px);right:21px;bottom:0;height:10px;background:var(--bg-1);z-index:4;touch-action:none;}
+  #hScrollThumb{position:absolute;top:1px;bottom:1px;background:#454b5c;border-radius:5px;}
+
+  #zoomCtrl{position:absolute;right:18px;bottom:16px;display:flex;flex-direction:column;gap:6px;z-index:5;}
+  #nudgeCtrl{position:absolute;left:18px;bottom:16px;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:5;opacity:.55;}
+  #trackWaveformPanel{position:absolute;top:6px;right:24px;width:220px;background:rgba(20,22,28,.9);border:1px solid var(--line);border-radius:8px;z-index:6;padding:6px;touch-action:none;}
+  #trackWaveformPanel.hidden{display:none;}
+  #trackWaveformLabel{font-size:11px;color:var(--text-dim);margin-bottom:4px;text-align:center;}
+  #trackWaveformCanvas{width:100%;height:60px;display:block;background:#000;border-radius:4px;}
+  #waveformViewBtn.active{background:var(--accent-dim);color:#fff;}
+  #vibratoBtn.active{background:var(--accent-dim);color:#fff;}
+  #nudgeCtrl.hidden{display:none;}
+  #nudgeCtrl button{width:34px;height:30px;background:var(--bg-2);border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:14px;}
+  #nudgeCtrl button:active{background:var(--line);}
+  .zoomgrp{display:flex;background:var(--bg-2);border-radius:8px;overflow:hidden;border:1px solid var(--line);}
+  .zoomgrp button{width:30px;height:28px;font-size:16px;color:var(--text);}
+  .zoomgrp button:active{background:var(--line);}
+  .zoomlbl{font-size:9px;color:var(--text-dim);text-align:center;margin-top:1px;}
+
+  /* ---------- Bottom bars ---------- */
+  #navbar{display:flex;align-items:center;background:var(--bg-1);border-top:1px solid var(--line);padding:4px 8px;gap:4px;}
+  #navbar button{padding:8px 14px;font-size:16px;color:var(--text-dim);}
+  #navbar button:active{color:var(--accent);}
+  #navbar .spacer{flex:1;}
+
+  #playbar{display:flex;align-items:center;background:var(--bg-0);padding:8px 6px;gap:6px;flex-wrap:nowrap;overflow-x:auto;}
+  #playbar .grp{display:flex;gap:5px;flex:0 0 auto;}
+  .iconbtn.wide{width:auto;padding:0 8px;font-size:14px;white-space:nowrap;}
+  #posLabel{color:var(--text-dim);font-size:13px;font-variant-numeric:tabular-nums;margin-left:4px;flex:0 0 auto;}
+  #flagIdxLabel{color:var(--text-dim);font-size:11px;flex:0 0 auto;min-width:34px;text-align:center;}
+  #playbar .spacer{flex:1;min-width:6px;}
+  #modeBtn.select-mode{background:var(--accent-dim);color:#fff;}
+  #playBtn.playing{background:var(--rec);color:#fff;}
+  #playFlagBtn.playing{background:var(--rec);color:#fff;}
+  #loopToggleBtn.active{background:var(--accent-dim);color:#fff;}
+  #exportProgressBar.indeterminate{width:40%!important;animation:exportSlide 1.1s ease-in-out infinite;}
+  @keyframes exportSlide{ 0%{margin-left:0%;} 50%{margin-left:60%;} 100%{margin-left:0%;} }
+  #exportCancelBtn:disabled{opacity:.5;}
+
+  /* ---------- Dialog ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
+  .overlay.hidden{display:none;}
+  .dialog{background:var(--bg-1);border:1px solid var(--line);border-radius:12px;width:100%;max-width:420px;max-height:82vh;overflow:hidden;display:flex;flex-direction:column;}
+  .dialog h3{margin:0;padding:16px 18px 10px;font-size:16px;color:var(--accent);}
+  .dialog .body{overflow-y:auto;padding:0 4px 8px;}
+  .dialog .foot{display:flex;justify-content:flex-end;gap:18px;padding:12px 18px;border-top:1px solid var(--line-soft);}
+  .dialog .foot button{color:var(--accent);font-size:15px;padding:6px 4px;}
+  .listrow{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line-soft);font-size:14px;}
+  .listrow:active{background:var(--bg-2);}
+  .listrow .sub{color:var(--text-dim);font-size:12px;}
+  .listrow .dot{width:10px;height:10px;border-radius:2px;background:#444;margin-right:10px;flex:0 0 auto;}
+  .listrow.selected .dot{background:var(--rec);}
+  .menurow{display:flex;align-items:center;gap:14px;padding:16px 18px;font-size:15px;border-bottom:1px solid var(--line-soft);}
+  .menurow:active{background:var(--bg-2);}
+
+  .field{padding:14px 18px;}
+  .field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:8px;}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  .numval{background:#000;color:var(--text);text-align:center;padding:6px 0;border-radius:6px;font-size:15px;margin:6px 0;}
+  .tsrow{display:flex;align-items:center;gap:10px;}
+  .tsbox{flex:1;background:var(--bg-2);border-radius:8px;padding:10px;text-align:center;font-size:20px;}
+  .tsdiv{color:var(--text-dim);font-size:22px;}
+
+  .mixch{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line-soft);}
+  .mixch .bar{width:6px;align-self:stretch;border-radius:3px;background:#3a3f4c;}
+  .mixch .bar.active{background:var(--rec);}
+  .mixch .name{width:34px;font-size:13px;flex:0 0 auto;text-align:center;background:var(--bg-2);border-radius:6px;padding:6px 0;}
+  .mixch .col{flex:1;min-width:0;}
+  .mixch .col .inst{font-size:11px;color:var(--text-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mixch .valnum{width:46px;text-align:center;font-size:13px;color:var(--text);background:#000;border:1px solid var(--line);border-radius:6px;padding:5px 2px;}
+  .mixch .msBtns{display:flex;flex-direction:column;gap:3px;}
+  .mixch .msBtn{width:22px;height:20px;font-size:11px;font-weight:700;border-radius:4px;background:var(--bg-2);color:var(--text-dim);border:1px solid var(--line);}
+  .mixch .msBtn.mute-on{background:var(--danger);color:#fff;}
+  .mixch .msBtn.solo-on{background:#e2c24f;color:#241c00;}
+  #instTabPreset.active,#instTabSynth.active{background:var(--accent-dim);color:#fff;}
+  #waveTabPreset.active,#waveTabCustom.active{background:var(--accent-dim);color:#fff;}
+  #fmTabAlgo.active,#fmTabOp.active{background:var(--accent-dim);color:#fff;}
+  .fmAlgoCard{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:8px 4px;text-align:center;font-size:12px;color:var(--text-dim);}
+  .fmAlgoCard.selected{border-color:var(--rec);color:var(--text);}
+  .fmOpTabBtn{padding:6px 10px;border-radius:6px;background:var(--bg-2);color:var(--text-dim);border:1px solid var(--line);font-size:13px;}
+  .fmOpTabBtn.active{background:var(--accent-dim);color:#fff;}
+  .fmtBtn.selected{background:var(--accent-dim);color:#fff;}
+  #instTabSf2.active{background:var(--accent-dim);color:#fff;}
+  .slotBtn{flex:1;padding:8px 0;border-radius:8px;background:var(--bg-2);color:var(--text-dim);border:1px solid var(--line);font-size:13px;position:relative;}
+  .slotBtn.selected{border-color:var(--rec);color:var(--text);}
+  .slotBtn.selected::after{content:'';position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:2px;background:var(--rec);}
+  input[type=number]{font-family:inherit;}
+  .numval{background:#000;color:var(--text);text-align:center;padding:6px 0;border-radius:6px;font-size:15px;margin:6px 0;border:1px solid var(--line);width:100%;}
+
+  input[type=text]{background:#000;border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:8px;width:100%;font-size:15px;}
+</style>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#14161b">
+<meta name="mobile-web-app-capable" content="yes">
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar1">
+    <button class="iconbtn" id="menuBtn" title="メニュー">☰</button>
+    <button class="iconbtn" id="songSettingsBtn" title="テンポ/拍子">📄</button>
+    <span id="tempoLabel">♩ = 120</span>
+    <button class="iconbtn" id="instBtn" title="音色">▭</button>
+    <div id="trackGrid" title="トラック選択"></div>
+  </div>
+
+  <div id="topbar2">
+    <span id="timesigLabel">4/4</span>
+    <button class="iconbtn" id="showOtherTracksBtn" title="他トラック表示">▤</button>
+    <button class="iconbtn" id="pitchCurveBtn" title="ピッチカーブ編集">〰</button>
+    <button class="iconbtn" id="waveformViewBtn" title="トラックの波形を表示">📈</button>
+    <button class="iconbtn" id="pitchClearBtn" title="ピッチカーブなしにする" style="display:none;">〰✕</button>
+    <button class="iconbtn" id="vibratoBtn" title="ビブラート" style="display:none;">〜♪</button>
+    <button class="iconbtn" id="gridDivBtn" title="グリッド分割">♪</button>
+  </div>
+
+  <div id="rollWrap">
+    <div id="flagStrip"><canvas id="flagCanvas"></canvas></div>
+    <div id="rollScroll">
+      <canvas id="kbCanvas"></canvas>
+      <canvas id="gridCanvas"></canvas>
+      <div id="pitchOverlay" class="hidden"><canvas id="pitchCanvas"></canvas></div>
+    </div>
+    <div id="vScrollTrack"><div id="vScrollThumb"></div></div>
+    <div id="hScrollTrack"><div id="hScrollThumb"></div></div>
+    <div id="trackWaveformPanel" class="hidden">
+      <div id="trackWaveformLabel"></div>
+      <canvas id="trackWaveformCanvas"></canvas>
+      <div id="waveformZoomRow" style="display:none;align-items:center;gap:6px;margin-top:4px;">
+        <span style="font-size:10px;color:var(--text-dim);">縦倍率</span>
+        <input type="range" id="waveformZoomSlider" min="1" max="15" step="0.5" value="3" style="flex:1;">
+      </div>
+    </div>
+    <div id="zoomCtrl">
+      <div><div class="zoomgrp"><button id="hzOut">-</button><button id="hzIn">+</button></div><div class="zoomlbl">横</div></div>
+      <div><div class="zoomgrp"><button id="vzOut">-</button><button id="vzIn">+</button></div><div class="zoomlbl">縦</div></div>
+    </div>
+    <div id="nudgeCtrl" class="hidden">
+      <button id="nudgeUp">▲</button>
+      <div style="display:flex;gap:4px;">
+        <button id="nudgeLeft">◀</button>
+        <button id="nudgeRight">▶</button>
+      </div>
+      <button id="nudgeDown">▼</button>
+    </div>
+  </div>
+
+  <div id="navbar">
+    <button id="navHome">[</button>
+    <button id="navPrev">&lt;</button>
+    <button id="navNext">&gt;</button>
+    <button id="navEnd">]</button>
+    <button id="prevFlagBtn" title="前の旗">◂⚑</button>
+    <span id="flagIdxLabel">旗-</span>
+    <button id="nextFlagBtn" title="次の旗">⚑▸</button>
+    <span class="spacer"></span>
+    <button id="undoBtn">↶</button>
+    <button id="redoBtn">↷</button>
+  </div>
+
+  <div id="playbar">
+    <div class="grp">
+      <button class="iconbtn" id="toStartBtn" title="曲の最初から再生">⏮</button>
+      <button class="iconbtn" id="playBtn" title="表示位置から再生">▶</button>
+      <button class="iconbtn wide" id="playFlagBtn" title="旗から再生">⚑▶</button>
+    </div>
+    <div class="grp">
+      <button class="iconbtn" id="loopToggleBtn" title="ループ再生">⟲</button>
+      <button class="iconbtn" id="loopRangeBtn" title="ループ範囲設定">[ ]</button>
+    </div>
+    <span id="posLabel">--:--</span>
+    <span class="spacer"></span>
+    <button class="iconbtn" id="modeBtn" title="入力/選択">✎</button>
+    <button class="iconbtn" id="copyBtn" title="コピー">⎘</button>
+    <button class="iconbtn" id="pasteBtn" title="貼り付け">⎗</button>
+  </div>
+</div>
+
+<!-- ================= Dialogs ================= -->
+
+<div class="overlay hidden" id="menuOverlay">
+  <div class="dialog" style="max-width:320px;">
+    <h3 id="projTitleLbl">[untitled]</h3>
+    <div class="body">
+      <div class="menurow" id="menuProject">📁 プロジェクト</div>
+      <div class="menurow" id="menuMixer">🎚 ミキサー</div>
+      <div class="menurow" id="menuSettings">🔧 設定</div>
+      <div class="menurow" id="menuAbout">ℹ️ このアプリについて</div>
+    </div>
+    <div class="foot"><button data-close="menuOverlay">閉じる</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="projectOverlay">
+  <div class="dialog" style="max-width:320px;">
+    <h3>プロジェクト</h3>
+    <div class="body">
+      <div class="menurow" id="projNew">新規</div>
+      <div class="menurow" id="projOpen">開く (ファイルから読込)</div>
+      <div class="menurow" id="projSaveAs">保存 (JSONダウンロード)</div>
+      <div class="menurow" id="projImportMidi">既存のMIDIファイルを読み込む</div>
+      <div class="menurow" id="projExportAudio">音声ファイルとして書き出す</div>
+      <div class="menurow" id="projRename">プロジェクト名変更</div>
+      <input type="file" id="fileInput" accept="application/json" style="display:none">
+      <input type="file" id="midiFileInput" accept=".mid,.midi,audio/midi" style="display:none">
+    </div>
+    <div class="foot"><button data-close="projectOverlay">閉じる</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="renameOverlay">
+  <div class="dialog" style="max-width:320px;">
+    <h3>プロジェクト名</h3>
+    <div class="field"><input type="text" id="renameInput"></div>
+    <div class="foot"><button data-close="renameOverlay">キャンセル</button><button id="renameOk">OK</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="mixerOverlay">
+  <div class="dialog" style="max-width:460px;">
+    <h3>ミキサー</h3>
+    <div class="body" id="mixerBody"></div>
+    <div class="foot"><button data-close="mixerOverlay">閉じる</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="songSettingsOverlay">
+  <div class="dialog" style="max-width:360px;">
+    <h3>ソング設定</h3>
+    <div class="field">
+      <label>テンポ (40-360)</label>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="number" class="numval" id="tempoVal" inputmode="numeric" value="120" style="flex:1;">
+        <span style="color:var(--text-dim);font-size:13px;">bpm</span>
+        <button class="iconbtn wide" id="tapTempoBtn">TAP</button>
+      </div>
+      <input type="range" id="tempoSlider" min="1" max="270" value="120">
+    </div>
+    <div class="field">
+      <label>拍子 (この小節から適用・分母は2の累乗である必要はありません)</label>
+      <div class="tsrow">
+        <div class="tsbox" id="tsNumMinus">-</div>
+        <input type="text" class="tsbox" id="tsNumVal" value="4" inputmode="numeric">
+        <div class="tsbox" id="tsNumPlus">+</div>
+      </div>
+      <div style="text-align:center;" class="tsdiv">/</div>
+      <div class="tsrow">
+        <div class="tsbox" id="tsDenMinus">-</div>
+        <input type="text" class="tsbox" id="tsDenVal" value="4" inputmode="numeric">
+        <div class="tsbox" id="tsDenPlus">+</div>
+      </div>
+      <label style="margin-top:10px;">適用開始小節</label>
+      <input type="text" class="numval" id="tsMeasureVal" value="1" inputmode="numeric">
+    </div>
+    <div class="foot"><button data-close="songSettingsOverlay">キャンセル</button><button id="songSettingsOk">OK</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="exportAudioOverlay">
+  <div class="dialog" style="max-width:360px;">
+    <h3>音声ファイルとして書き出す</h3>
+    <div class="field">
+      <label>形式</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="exportFormatRow"></div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:6px;">WAV以外は端末のブラウザが対応している場合のみ選んだ形式で書き出せます。対応していない場合は自動的に別形式になることがあります。</div>
+    </div>
+    <div class="field">
+      <label>曲の前の無音(小節、テンキー入力可)</label>
+      <input type="text" class="numval" id="exportLeadMeasures" value="0" inputmode="decimal">
+      <label>曲の後の無音(小節、テンキー入力可)</label>
+      <input type="text" class="numval" id="exportTrailMeasures" value="1" inputmode="decimal">
+    </div>
+    <div class="foot"><button data-close="exportAudioOverlay">キャンセル</button><button id="exportAudioGo">書き出す</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="exportProgressOverlay">
+  <div class="dialog" style="max-width:320px;">
+    <h3>書き出し中...</h3>
+    <div class="field">
+      <div id="exportProgressLabel" style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">準備中...</div>
+      <div style="background:var(--bg-2);border-radius:6px;overflow:hidden;height:10px;">
+        <div id="exportProgressBar" style="background:var(--accent);height:100%;width:0%;transition:width .2s;"></div>
+      </div>
+    </div>
+    <div class="foot" style="justify-content:flex-end;"><button id="exportCancelBtn">キャンセル</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="settingsOverlay">
+  <div class="dialog" style="max-width:340px;">
+    <h3>設定</h3>
+    <div class="field">
+      <label>FM Synthを使えるトラック数の上限(空欄=無制限。メガドライブ風なら6など)</label>
+      <input type="text" class="numval" id="settingsMaxFmTracks" value="" inputmode="numeric" placeholder="無制限">
+      <label>トラックごとの同時発音数の上限(FM Synth・Retro Synth共通。空欄=無制限)</label>
+      <input type="text" class="numval" id="settingsMaxPoly" value="" inputmode="numeric" placeholder="無制限">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:6px;">上限を超えると、一番古い音を止めて新しい音を優先します(ボイススティール)。止められて鳴らない部分はピアノロール上でグレー表示されます。</div>
+    </div>
+    <div class="foot"><button data-close="settingsOverlay">キャンセル</button><button id="settingsOk">OK</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="fmSynthOverlay">
+  <div class="dialog" style="max-width:480px;">
+    <h3>FM Synth</h3>
+    <div style="display:flex;gap:8px;padding:0 16px 10px;">
+      <button class="iconbtn wide" id="fmTabAlgo" style="flex:1;">アルゴリズム</button>
+      <button class="iconbtn wide" id="fmTabOp" style="flex:1;">オペレーター</button>
+    </div>
+    <div id="fmAlgoPane" style="height:44vh;overflow-y:auto;padding:0 16px;">
+      <div id="fmAlgoList" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;"></div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">選んだアルゴリズムの構成図。丸(オペレーター)をタップするとフィードバックのON/OFFを切り替えられます。</div>
+      <canvas id="fmAlgoDiagram" style="width:100%;height:140px;display:block;background:#000;border-radius:8px;touch-action:none;"></canvas>
+    </div>
+    <div id="fmOpPane" style="display:none;height:44vh;overflow-y:auto;">
+      <div style="display:flex;gap:4px;padding:0 16px 8px;flex-wrap:wrap;" id="fmOpTabs"></div>
+      <div style="padding:0 16px 8px;">
+        <canvas id="fmOpWaveCanvas" style="width:100%;height:80px;display:block;background:#000;border-radius:8px;"></canvas>
+      </div>
+      <div class="field">
+        <label>周波数比</label>
+        <input type="number" class="numval" id="fmOpRatioVal" inputmode="decimal" step="0.01" value="1.00">
+        <input type="range" id="fmOpRatioSlider" min="0.5" max="16" step="0.01" value="1">
+        <label>位相</label>
+        <input type="number" class="numval" id="fmOpPhaseVal" inputmode="decimal" step="0.01" value="0.00">
+        <input type="range" id="fmOpPhaseSlider" min="0" max="6.283" step="0.01" value="0">
+        <label>音量(このオペレーターの出力の大きさ)</label>
+        <input type="number" class="numval" id="fmOpLevelVal" inputmode="decimal" step="0.01" value="1.00">
+        <input type="range" id="fmOpLevelSlider" min="0" max="2" step="0.01" value="1">
+      </div>
+    </div>
+    <div class="foot" style="justify-content:space-between;">
+      <div style="display:flex;gap:8px;">
+        <button id="fmMemorySlotBtn">波形メモリ</button>
+        <button id="fmTimbreEventsBtn">音色切替</button>
+      </div>
+      <button data-close="fmSynthOverlay">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="fmEnvelopeOverlay">
+  <div class="dialog" style="max-width:320px;">
+    <h3>エンベロープ(ADSR)</h3>
+    <div class="field">
+      <label>アタック(秒)</label>
+      <div class="numval" id="fmAttackVal">0.01</div>
+      <input type="range" id="fmAttackSlider" min="0" max="2" step="0.01" value="0.01">
+      <label>ディケイ(秒)</label>
+      <div class="numval" id="fmDecayVal">0.1</div>
+      <input type="range" id="fmDecaySlider" min="0" max="2" step="0.01" value="0.1">
+      <label>サステイン(0〜1)</label>
+      <div class="numval" id="fmSustainVal">0.7</div>
+      <input type="range" id="fmSustainSlider" min="0" max="1" step="0.01" value="0.7">
+      <label>リリース(秒)</label>
+      <div class="numval" id="fmReleaseVal">0.3</div>
+      <input type="range" id="fmReleaseSlider" min="0" max="3" step="0.01" value="0.3">
+    </div>
+    <div class="foot"><button data-close="fmEnvelopeOverlay">閉じる</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="fmMemoryOverlay">
+  <div class="dialog" style="max-width:340px;">
+    <h3>FM波形メモリ</h3>
+    <div class="body" id="fmMemoryList" style="max-height:50vh;overflow-y:auto;"></div>
+    <div class="foot"><button data-close="fmMemoryOverlay">閉じる</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="timbreEventsOverlay">
+  <div class="dialog" style="max-width:360px;">
+    <h3>音色切り替えイベント</h3>
+    <div style="font-size:12px;color:var(--text-dim);padding:0 16px 8px;">指定した小節から、このトラックが使うFM波形メモリを切り替えます。</div>
+    <div class="body" id="timbreEventsList" style="max-height:38vh;"></div>
+    <div class="field" style="display:flex;gap:8px;align-items:flex-end;">
+      <div style="flex:1;"><label>小節</label><input type="text" class="numval" id="timbreEventMeasure" value="1" inputmode="numeric"></div>
+      <div style="flex:1;"><label>波形メモリ</label><input type="text" class="numval" id="timbreEventSlot" value="1" inputmode="numeric"></div>
+      <button class="iconbtn" id="timbreEventAdd" style="height:38px;">追加</button>
+    </div>
+    <div class="foot"><button data-close="timbreEventsOverlay">閉じる</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="loopRangeOverlay">
+  <div class="dialog" style="max-width:320px;">
+    <h3>ループ範囲設定</h3>
+    <div class="field">
+      <label>開始(小節.拍 例:1.25 → 1小節目2拍目)</label>
+      <input type="text" class="numval" id="loopStartMeasure" value="1" inputmode="decimal">
+      <label>終了(この位置の頭まで)</label>
+      <input type="text" class="numval" id="loopEndMeasure" value="5" inputmode="decimal">
+    </div>
+    <div class="foot"><button data-close="loopRangeOverlay">キャンセル</button><button id="loopRangeOk">OK</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="vibratoOverlay">
+  <div class="dialog" style="max-width:320px;">
+    <h3>ビブラート</h3>
+    <div class="field">
+      <label>深さ(半音)</label>
+      <div class="numval" id="vibratoDepthVal">0.3</div>
+      <input type="range" id="vibratoDepthSlider" min="0" max="2" step="0.05" value="0.3">
+      <label>速さ(回/1拍)</label>
+      <div class="numval" id="vibratoSpeedVal">2.0</div>
+      <input type="range" id="vibratoSpeedSlider" min="0.5" max="8" step="0.25" value="2">
+      <label>開始まで(秒、ノーツ開始からこの時間はかからない)</label>
+      <div class="numval" id="vibratoDelayVal">0.0</div>
+      <input type="range" id="vibratoDelaySlider" min="0" max="2" step="0.05" value="0">
+    </div>
+    <div class="foot"><button id="vibratoRemove">選択から削除</button><button id="vibratoApply">選択に適用</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="trackOverlay">
+  <div class="dialog">
+    <h3>トラック選択</h3>
+    <div class="body" id="trackListBody"></div>
+    <div class="foot" style="justify-content:space-between;">
+      <button id="trackVisToggleAll">表示チェックを全選択</button>
+      <button data-close="trackOverlay">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="instCatOverlay">
+  <div class="dialog">
+    <h3>音色カテゴリー</h3>
+    <div class="body" id="instCatBody"></div>
+    <div class="foot"><button data-close="instCatOverlay">キャンセル</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="instOverlay">
+  <div class="dialog">
+    <h3>音色選択</h3>
+    <div style="display:flex;gap:8px;padding:0 16px 10px;">
+      <button class="iconbtn wide" id="instTabPreset" style="flex:1;">プリセット</button>
+      <button class="iconbtn wide" id="instTabSynth" style="flex:1;">シンセ</button>
+      <button class="iconbtn wide" id="instTabSf2" style="flex:1;">SF2</button>
+    </div>
+    <div id="instPresetPane" style="height:38vh;overflow-y:auto;">
+      <div class="listrow" id="instCatSwitch"><span id="instCatCurrent">- All -</span><span>▾</span></div>
+      <div id="instListBody"></div>
+    </div>
+    <div id="instSynthPane" style="display:none;height:38vh;overflow-y:auto;"></div>
+    <div id="instSf2Pane" style="display:none;height:38vh;overflow-y:auto;">
+      <div id="instSf2List"></div>
+      <button class="menurow" id="instSf2LoadBtn" style="width:100%;text-align:left;">SF2を読み込む</button>
+    </div>
+    <div class="field">
+      <label>プレビュー</label>
+      <div style="display:flex;gap:6px;" id="previewKeys"></div>
+    </div>
+    <div class="foot" style="justify-content:space-between;">
+      <div style="display:flex;gap:8px;">
+        <button id="instCustomBtn">カスタム</button>
+        <button id="instWaveBtn" style="display:none;">波形</button>
+      </div>
+      <div style="display:flex;gap:18px;">
+        <button data-close="instOverlay">キャンセル</button>
+        <button id="instOk">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="waveformEditorOverlay">
+  <div class="dialog" style="max-width:480px;">
+    <h3>Retro Synth</h3>
+    <div style="display:flex;gap:8px;padding:0 16px 10px;">
+      <button class="iconbtn wide" id="waveTabPreset" style="flex:1;">プリセット</button>
+      <button class="iconbtn wide" id="waveTabCustom" style="flex:1;">カスタム波形</button>
+    </div>
+    <div id="wavePresetPane" style="height:44vh;overflow-y:auto;"></div>
+    <div id="waveCustomPane" style="display:none;height:44vh;overflow-y:auto;">
+      <div id="waveUseCustomRow" class="listrow"><div style="display:flex;align-items:center;"><span class="dot"></span>カスタム波形を使用する</div></div>
+      <div style="display:flex;gap:6px;padding:8px 16px;" id="waveSlotRow"></div>
+      <div style="padding:6px 16px 0;color:var(--text-dim);font-size:12px;">バーをなぞって波形の形を描けます</div>
+      <div style="padding:8px 16px;display:flex;gap:8px;align-items:center;">
+        <button class="iconbtn" id="waveformUndo">↶</button>
+        <button class="iconbtn" id="waveformRedo">↷</button>
+        <span style="flex:1;"></span>
+      </div>
+      <div style="padding:0 16px 8px;">
+        <canvas id="waveformCanvas" style="width:100%;height:150px;display:block;background:#000;border-radius:8px;touch-action:none;"></canvas>
+      </div>
+      <div style="padding:0 16px 8px;">
+        <label style="display:block;font-size:12px;color:var(--text-dim);margin-bottom:6px;">プレビュー</label>
+        <div style="display:flex;gap:6px;" id="waveformPreviewKeys"></div>
+      </div>
+    </div>
+    <div class="foot"><button id="waveformReset">リセット</button><button data-close="waveformEditorOverlay">閉じる</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="gridDivOverlay">
+  <div class="dialog" style="max-width:300px;">
+    <h3>グリッド分割</h3>
+    <div class="body" id="gridDivBody"></div>
+    <div class="foot"><button data-close="gridDivOverlay">閉じる</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   DATA MODEL
+   ============================================================ */
+const PPQ = 480; // ticks per quarter note
+
+/* Retro Synth waveform generators — must be defined before newSong()/newTrack() since
+   newSong() seeds the project's custom-waveform memory slots immediately at load time. */
+const WAVE_BARS = 32;
+const WAVE_LEVELS = 16; // quantized height steps, so dragged bars can be made to line up exactly
+function quantizeWaveVal(v){ return Math.round(Math.max(-1,Math.min(1,v))*WAVE_LEVELS)/WAVE_LEVELS; }
+function waveSquare(duty){
+  const onCount = Math.round(WAVE_BARS*duty);
+  return Array.from({length:WAVE_BARS}, (_,i)=> i<onCount ? 0.8 : -0.8);
+}
+function defaultRetroWaveform(){ return waveSquare(0.5); }
+function waveTriangle(){
+  return Array.from({length:WAVE_BARS}, (_,i)=>{
+    const t=i/WAVE_BARS;
+    return quantizeWaveVal(t<0.5 ? (t*4-1) : (3-t*4));
+  });
+}
+function waveSaw(){
+  return Array.from({length:WAVE_BARS}, (_,i)=> quantizeWaveVal((i/WAVE_BARS)*2-1));
+}
+function waveSine(){
+  return Array.from({length:WAVE_BARS}, (_,i)=> quantizeWaveVal(Math.sin(2*Math.PI*i/WAVE_BARS)));
+}
+function waveNoiseShort(){
+  return Array.from({length:WAVE_BARS}, ()=> quantizeWaveVal(Math.random()*2-1));
+}
+function waveNoiseLong(){
+  const steps=8, hold=WAVE_BARS/steps;
+  const vals = Array.from({length:steps}, ()=> quantizeWaveVal(Math.random()*2-1));
+  return Array.from({length:WAVE_BARS}, (_,i)=> vals[Math.floor(i/hold)]);
+}
+const WAVE_PRESETS = [
+  {name:'矩形波(デューティ比12.5%)', gen:()=>waveSquare(0.125)},
+  {name:'矩形波(デューティ比25%)', gen:()=>waveSquare(0.25)},
+  {name:'矩形波(デューティ比37.5%)', gen:()=>waveSquare(0.375)},
+  {name:'矩形波(デューティ比50%)', gen:()=>waveSquare(0.5)},
+  {name:'三角波', gen:waveTriangle},
+  {name:'ノコギリ波', gen:waveSaw},
+  {name:'サイン波', gen:waveSine},
+  {name:'ノイズ(長周期)', gen:waveNoiseLong},
+  {name:'ノイズ(短周期)', gen:waveNoiseShort},
+];
+
+/* ============================================================
+   FM SYNTH (6 operators, preset algorithms)
+   mods: [ [modulatorOpIndex, destOpIndex], ... ] — modulator's output frequency-modulates dest
+   carriers: operator indices whose output is summed into the final audible signal
+   Feedback (self-modulation) is a per-operator on/off flag, toggled independently of algorithm.
+   ============================================================ */
+const FM_ALGORITHMS = [
+  {name:'加算(6キャリア)', mods:[], carriers:[0,1,2,3,4,5],
+   layout:{pos:[{c:0,r:0},{c:1,r:0},{c:2,r:0},{c:3,r:0},{c:4,r:0},{c:5,r:0}]}},
+  {name:'1変調→5キャリア', mods:[[5,0],[5,1],[5,2],[5,3],[5,4]], carriers:[0,1,2,3,4],
+   layout:{pos:[{c:0,r:0},{c:1,r:0},{c:2,r:0},{c:3,r:0},{c:4,r:0},{c:2,r:1}]}},
+  {name:'6直列チェーン', mods:[[5,4],[4,3],[3,2],[2,1],[1,0]], carriers:[0],
+   layout:{pos:[{c:0,r:0},{c:0,r:1},{c:0,r:2},{c:0,r:3},{c:0,r:4},{c:0,r:5}]}},
+  {name:'3+3チェーン', mods:[[5,4],[4,3],[2,1],[1,0]], carriers:[3,0],
+   layout:{pos:[{c:0,r:0},{c:0,r:1},{c:0,r:2},{c:1,r:0},{c:1,r:1},{c:1,r:2}]}},
+  {name:'2+2+2チェーン', mods:[[5,4],[3,2],[1,0]], carriers:[4,2,0],
+   layout:{pos:[{c:0,r:0},{c:0,r:1},{c:1,r:0},{c:1,r:1},{c:2,r:0},{c:2,r:1}]}},
+  {name:'4チェーン+2キャリア', mods:[[5,4],[4,3],[3,2]], carriers:[2,1,0],
+   layout:{pos:[{c:2,r:0},{c:1,r:0},{c:0,r:0},{c:0,r:1},{c:0,r:2},{c:0,r:3}]}},
+  {name:'3+2+1', mods:[[5,4],[4,3],[2,1]], carriers:[3,1,0],
+   layout:{pos:[{c:0,r:0},{c:1,r:0},{c:1,r:1},{c:2,r:0},{c:2,r:1},{c:2,r:2}]}},
+  {name:'スター(2分岐×2)', mods:[[5,4],[5,3],[2,1],[2,0]], carriers:[4,3,1,0],
+   layout:{pos:[{c:3,r:0},{c:2,r:0},{c:2,r:1},{c:1,r:0},{c:0,r:0},{c:0,r:1}]}},
+];
+function defaultFmOperators(){
+  return Array.from({length:6}, (_,i)=>({ratio:1, phase:0, level: i===0?1:0.5, feedback:false}));
+}
+function defaultFmEnvelope(){ return {attack:0.01, decay:0.1, sustain:0.7, release:0.3}; }
+function defaultFmPreset(){
+  return { algorithm:0, operators:defaultFmOperators(), envelope:defaultFmEnvelope() };
+}
+
+const GM_INSTRUMENTS = [
+"Acoustic Grand Piano","Bright Acoustic Piano","Electric Grand Piano","Honky-tonk Piano","Electric Piano 1","Electric Piano 2","Harpsichord","Clavi",
+"Celesta","Glockenspiel","Music Box","Vibraphone","Marimba","Xylophone","Tubular Bells","Dulcimer",
+"Drawbar Organ","Percussive Organ","Rock Organ","Church Organ","Reed Organ","Accordion","Harmonica","Tango Accordion",
+"Acoustic Guitar (nylon)","Acoustic Guitar (steel)","Electric Guitar (jazz)","Electric Guitar (clean)","Electric Guitar (muted)","Overdriven Guitar","Distortion Guitar","Guitar Harmonics",
+"Acoustic Bass","Electric Bass (finger)","Electric Bass (pick)","Fretless Bass","Slap Bass 1","Slap Bass 2","Synth Bass 1","Synth Bass 2",
+"Violin","Viola","Cello","Contrabass","Tremolo Strings","Pizzicato Strings","Orchestral Harp","Timpani",
+"String Ensemble 1","String Ensemble 2","Synth Strings 1","Synth Strings 2","Choir Aahs","Voice Oohs","Synth Voice","Orchestra Hit",
+"Trumpet","Trombone","Tuba","Muted Trumpet","French Horn","Brass Section","Synth Brass 1","Synth Brass 2",
+"Soprano Sax","Alto Sax","Tenor Sax","Baritone Sax","Oboe","English Horn","Bassoon","Clarinet",
+"Piccolo","Flute","Recorder","Pan Flute","Blown Bottle","Shakuhachi","Whistle","Ocarina",
+"Lead 1 (square)","Lead 2 (sawtooth)","Lead 3 (calliope)","Lead 4 (chiff)","Lead 5 (charang)","Lead 6 (voice)","Lead 7 (fifths)","Lead 8 (bass+lead)",
+"Pad 1 (new age)","Pad 2 (warm)","Pad 3 (polysynth)","Pad 4 (choir)","Pad 5 (bowed)","Pad 6 (metallic)","Pad 7 (halo)","Pad 8 (sweep)",
+"FX 1 (rain)","FX 2 (soundtrack)","FX 3 (crystal)","FX 4 (atmosphere)","FX 5 (brightness)","FX 6 (goblins)","FX 7 (echoes)","FX 8 (sci-fi)",
+"Sitar","Banjo","Shamisen","Koto","Kalimba","Bag pipe","Fiddle","Shanai",
+"Tinkle Bell","Agogo","Steel Drums","Woodblock","Taiko Drum","Melodic Tom","Synth Drum","Reverse Cymbal",
+"Guitar Fret Noise","Breath Noise","Seashore","Bird Tweet","Telephone Ring","Helicopter","Applause","Gunshot"
+];
+const GM_CATEGORIES = ["Piano","Chromatic Percussion","Organ","Guitar","Bass","Strings","Ensemble","Brass","Reed","Pipe","Synth Lead","Synth Pad","Synth Effects","Ethnic","Percussive","Sound Effects"];
+function catOfInstrument(i){ return Math.floor(i/8); }
+
+const GRID_DIVISIONS = [
+  {id:'8', label:'8分音符', ticks: PPQ/2},
+  {id:'16', label:'16分音符', ticks: PPQ/4},
+  {id:'32', label:'32分音符', ticks: PPQ/8},
+  {id:'3', label:'3連符', ticks: PPQ/3},
+  {id:'6', label:'6連符', ticks: PPQ/6},
+];
+
+/* ============================================================
+   VOICE STEALING (polyphony limiting for FM/Retro Synth tracks)
+   Classic "steal the oldest voice" allocator: sweeps notes in start-order, and whenever a new
+   note would exceed the limit, cuts short whichever currently-held note started earliest. Result
+   is cached per track and only recomputed when that track's notes actually change.
+   ============================================================ */
+let voiceStealCache = {};
+function invalidateVoiceStealCache(trackIdx){
+  if(trackIdx===undefined) voiceStealCache={};
+  else delete voiceStealCache[trackIdx];
+}
+function getVoiceStealInfo(trackIdx){
+  const tr = song.tracks[trackIdx];
+  const maxPoly = song.limits && song.limits.maxPolyphonyPerTrack;
+  if(!maxPoly || (tr.instrumentType!=='fm' && tr.instrumentType!=='synth')) return null;
+  if(voiceStealCache[trackIdx]) return voiceStealCache[trackIdx];
+  const sorted = [...tr.notes].sort((a,b)=>a.startTick-b.startTick);
+  const active=[]; const result=new Map();
+  sorted.forEach(nt=>{
+    const noteStart=nt.startTick, noteEnd=nt.startTick+nt.lengthTick;
+    for(let i=active.length-1;i>=0;i--){ if(active[i].end<=noteStart) active.splice(i,1); }
+    if(active.length>=maxPoly){
+      const victim = active.shift();
+      result.set(victim.note.id, {effectiveEnd:noteStart, stolen:true});
+    }
+    active.push({note:nt, end:noteEnd});
+    result.set(nt.id, {effectiveEnd:noteEnd, stolen:false});
+  });
+  voiceStealCache[trackIdx]=result;
+  return result;
+}
+function effectiveNoteEndTick(trackIdx, nt){
+  const info = getVoiceStealInfo(trackIdx);
+  if(info){
+    const rec = info.get(nt.id);
+    if(rec) return rec.effectiveEnd;
+  }
+  return nt.startTick+nt.lengthTick;
+}
+
+function newTrack(i){
+  return { id:i, name:'Track '+(i+1), instrument: i===9? -1 : 0, instrumentType:'preset',
+    synthMode:'preset', synthPresetIdx:3, synthCustomSlot:1,
+    fmMemorySlot:1, timbreEvents:[], // FM Synth: which of the 16 project-wide memory slots this track uses, plus mid-track switch events
+    volume:100, pan:0, notes:[], muted:false, solo:false };
+  // instrument -1 == drums, matches original Track10
+}
+
+function newSong(){
+  return {
+    name: '[untitled]',
+    tempo: 120,
+    tempoChanges: [{tick:0, bpm:120}], // supports MIDI files with tempo changes mid-song; tempo above mirrors tempoChanges[0]
+    timeSigChanges: [{measure:1, num:4, den:4}],
+    gridDiv: '8',
+    tracks: Array.from({length:16}, (_,i)=>newTrack(i)),
+    activeTrack: 0,
+    flags: [],           // array of tick positions, kept sorted ascending
+    currentFlagIndex: -1, // index into flags[], -1 = none
+    customWaveforms: Array.from({length:4}, ()=>defaultRetroWaveform()), // Retro Synth custom waveform memory (project-wide, 4 slots)
+    fmMemory: Array.from({length:16}, ()=>defaultFmPreset()), // FM Synth preset memory (project-wide, 16 slots)
+    limits: { maxFmTracks: null, maxPolyphonyPerTrack: null }, // null = unlimited
+  };
+}
+function addFlag(tick){
+  song.flags.push(tick);
+  song.flags.sort((a,b)=>a-b);
+  song.currentFlagIndex = song.flags.indexOf(tick);
+}
+function removeFlagAt(idx){
+  song.flags.splice(idx,1);
+  if(song.flags.length===0) song.currentFlagIndex=-1;
+  else song.currentFlagIndex = Math.min(idx, song.flags.length-1);
+}
+function currentFlagTick(){
+  return song.currentFlagIndex>=0 ? song.flags[song.currentFlagIndex] : 0;
+}
+let song = newSong();
+let loopEnabled=false, loopStartTickVal=0, loopEndTickVal=null; // loopEndTickVal resolved lazily once PPQ/measure helpers exist
+
+/* ---- time signature helpers: build measure -> startTick table on demand ---- */
+function tsForMeasure(m){
+  let cur = song.timeSigChanges[0];
+  for(const c of song.timeSigChanges){ if(c.measure<=m) cur=c; else break; }
+  return cur;
+}
+function ticksPerMeasure(ts){ return Math.round(PPQ*4*(ts.num/ts.den)); }
+// cache measure start ticks up to N measures
+let measureCache = [0];
+function ensureMeasureCache(upTo){
+  while(measureCache.length <= upTo){
+    const m = measureCache.length; // 1-indexed measure about to be appended is index m (measure m+1 start)
+    const ts = tsForMeasure(m); // measure number 1-indexed... measureCache[0]=start of measure1=0
+    measureCache.push(measureCache[measureCache.length-1] + ticksPerMeasure(ts));
+  }
+}
+function measureStartTick(measure1idx){ ensureMeasureCache(measure1idx); return measureCache[measure1idx-1]; }
+function tickToMeasure(tick){
+  ensureMeasureCache(4096); // generous cache; cheap
+  let lo=1;
+  for(let i=0;i<measureCache.length-1;i++){
+    if(tick>=measureCache[i] && tick<measureCache[i+1]) return i+1;
+  }
+  return measureCache.length;
+}
+function resetMeasureCache(){ measureCache=[0]; }
+
+/* Converts a "measure.fraction" decimal (e.g. 1.25 -> measure 1, beat 2 in a 4-beat measure)
+   into a tick, snapped to the nearest actual beat of whatever time signature is active at that
+   measure. Also provides the reverse, for redisplaying an already-snapped value in a dialog. */
+function beatSnappedMeasureToTick(decimalMeasure){
+  const measure = Math.max(1, Math.floor(decimalMeasure));
+  const frac = decimalMeasure - measure;
+  const ts = tsForMeasure(measure);
+  const beatCount = Math.max(1, ts.num);
+  const rawBeatIndex = frac*beatCount;
+  const snappedBeatIndex = Math.max(0, Math.min(beatCount-1, Math.round(rawBeatIndex)));
+  const ticksPerBeat = PPQ*4/ts.den;
+  return measureStartTick(measure) + snappedBeatIndex*ticksPerBeat;
+}
+function tickToBeatSnappedDecimal(tick){
+  const m = tickToMeasure(tick);
+  const ts = tsForMeasure(m);
+  const measureStart = measureStartTick(m);
+  const ticksPerBeat = PPQ*4/ts.den;
+  const beatIndex = Math.round((tick-measureStart)/ticksPerBeat);
+  return +(m + beatIndex/Math.max(1,ts.num)).toFixed(4);
+}
+
+/* ============================================================
+   STANDARD MIDI FILE (.mid) IMPORT
+   First-pass importer: note on/off, tempo, time signature, program
+   change. Does not handle SMPTE-division files, controller automation,
+   or sysex — good enough to bring an existing arrangement in and compare
+   the editing feel against building it from scratch.
+   ============================================================ */
+function midiParseVLQ(view, pos){
+  let value=0, byte;
+  do{ byte=view.getUint8(pos++); value=(value<<7)|(byte&0x7f); } while(byte&0x80);
+  return {value, pos};
+}
+function parseMidiFile(buf){
+  const view = new DataView(buf);
+  const fourcc = o => String.fromCharCode(view.getUint8(o),view.getUint8(o+1),view.getUint8(o+2),view.getUint8(o+3));
+  if(fourcc(0)!=='MThd') throw new Error('MThdヘッダが見つかりません(MIDIファイルではない可能性)');
+  const headerLen = view.getUint32(4);
+  const format = view.getUint16(8);
+  const ntrks = view.getUint16(10);
+  const division = view.getUint16(12);
+  if(division & 0x8000) throw new Error('SMPTEタイムコード形式のMIDIファイルには未対応です');
+  const scale = PPQ/(division||480);
+  let pos = 8+headerLen;
+
+  const result = newSong();
+  result.tracks = Array.from({length:16},(_,i)=>newTrack(i));
+  const rawTsEvents = []; // {tick, num, den} — resolved to measure numbers after parsing, since we can't
+                           // use the live tickToMeasure() here (it reads the *current* song, not this one)
+  let tempoBpm = null;
+  const rawTempoEvents = []; // {tick, bpm} — deduped/sorted into result.tempoChanges after parsing
+  let midiTitle = null;
+
+  for(let t=0;t<ntrks && pos<view.byteLength-8; t++){
+    if(fourcc(pos)!=='MTrk') break;
+    const trackLen = view.getUint32(pos+4);
+    const trackEnd = pos+8+trackLen;
+    let p = pos+8, absTick=0, runningStatus=0;
+    const noteOnStack = {};
+    let progByChannel = {}, volByChannel = {}, panByChannel = {};
+    let sawChannel9 = false;
+    let lastChannel = t%16;
+
+    while(p<trackEnd){
+      const vlq = midiParseVLQ(view,p); p=vlq.pos; absTick+=vlq.value;
+      let statusByte = view.getUint8(p);
+      if(statusByte<0x80){ statusByte=runningStatus; } else { p++; runningStatus=statusByte; }
+
+      if(statusByte===0xFF){
+        const metaType=view.getUint8(p); p++;
+        const len=midiParseVLQ(view,p); p=len.pos;
+        if(metaType===0x51 && len.value===3){
+          const usPerQ=(view.getUint8(p)<<16)|(view.getUint8(p+1)<<8)|view.getUint8(p+2);
+          const bpm = Math.max(1, Math.round(60000000/usPerQ));
+          if(tempoBpm===null) tempoBpm = bpm;
+          rawTempoEvents.push({tick: Math.round(absTick*scale), bpm});
+        } else if(metaType===0x58 && len.value>=2){
+          const num=view.getUint8(p), den=Math.pow(2,view.getUint8(p+1));
+          rawTsEvents.push({tick: Math.round(absTick*scale), num, den});
+        } else if((metaType===0x03 || metaType===0x01) && midiTitle===null && len.value>0){
+          let s=''; for(let i=0;i<len.value;i++) s+=String.fromCharCode(view.getUint8(p+i));
+          s = s.trim();
+          if(s) midiTitle = s;
+        }
+        p += len.value;
+      } else if(statusByte===0xF0 || statusByte===0xF7){
+        const len=midiParseVLQ(view,p); p=len.pos+len.value;
+      } else {
+        const eventType = statusByte & 0xf0, channel = statusByte & 0x0f;
+        lastChannel = channel;
+        if(channel===9) sawChannel9 = true;
+        if(eventType===0x90 || eventType===0x80){
+          const pitch=view.getUint8(p), vel=view.getUint8(p+1); p+=2;
+          const key = channel*128+pitch;
+          if(eventType===0x90 && vel>0){
+            noteOnStack[key] = {startTick:absTick, velocity:vel};
+          } else {
+            const on = noteOnStack[key];
+            if(on){
+              delete noteOnStack[key];
+              const st = Math.round(on.startTick*scale);
+              const ln = Math.max(1, Math.round((absTick-on.startTick)*scale));
+              const idx = format===0 ? (channel===9?9:Math.min(channel,15)) : Math.min(t,15);
+              result.tracks[idx].notes.push({id:noteIdSeq++, pitch, startTick:st, lengthTick:ln});
+            }
+          }
+        } else if(eventType===0xC0){
+          const prog=view.getUint8(p); p+=1;
+          progByChannel[channel]=prog;
+        } else if(eventType===0xB0){
+          const ccNum=view.getUint8(p), ccVal=view.getUint8(p+1); p+=2;
+          if(ccNum===7) volByChannel[channel]=ccVal;
+          else if(ccNum===10) panByChannel[channel]=ccVal;
+        } else if(eventType===0xA0||eventType===0xE0){ p+=2; }
+        else if(eventType===0xD0){ p+=1; }
+        else { p+=2; }
+      }
+    }
+    const idx = format===0 ? null : Math.min(t,15);
+    if(idx!=null){
+      if(sawChannel9) result.tracks[idx].instrument = -1;
+      else if(progByChannel[lastChannel]!==undefined) result.tracks[idx].instrument = progByChannel[lastChannel];
+      if(volByChannel[lastChannel]!==undefined) result.tracks[idx].volume = volByChannel[lastChannel];
+      if(panByChannel[lastChannel]!==undefined) result.tracks[idx].pan = Math.round((panByChannel[lastChannel]-64)/64*100);
+    } else {
+      // format 0: single multiplexed track — assign per-channel program/volume/pan to the matching track slot
+      Object.keys(progByChannel).forEach(ch=>{
+        const chn=+ch; const ti = chn===9?9:Math.min(chn,15);
+        if(chn!==9) result.tracks[ti].instrument = progByChannel[ch];
+      });
+      Object.keys(volByChannel).forEach(ch=>{
+        const chn=+ch; const ti = chn===9?9:Math.min(chn,15);
+        result.tracks[ti].volume = volByChannel[ch];
+      });
+      Object.keys(panByChannel).forEach(ch=>{
+        const chn=+ch; const ti = chn===9?9:Math.min(chn,15);
+        result.tracks[ti].pan = Math.round((panByChannel[ch]-64)/64*100);
+      });
+      result.tracks[9].instrument = -1;
+    }
+    pos = trackEnd;
+  }
+  if(tempoBpm!==null) result.tempo = tempoBpm;
+  if(rawTempoEvents.length){
+    rawTempoEvents.sort((a,b)=>a.tick-b.tick);
+    const finalTempo=[];
+    rawTempoEvents.forEach(ev=>{
+      if(finalTempo.length && finalTempo[finalTempo.length-1].tick===ev.tick) finalTempo[finalTempo.length-1]=ev;
+      else finalTempo.push(ev);
+    });
+    if(finalTempo[0].tick!==0) finalTempo.unshift({tick:0, bpm:finalTempo[0].bpm});
+    result.tempoChanges = finalTempo;
+  }
+  rawTsEvents.sort((a,b)=>a.tick-b.tick);
+  let curNum=4, curDen=4, curMeasure=1, curTick=0;
+  const finalTs=[{measure:1,num:4,den:4}];
+  rawTsEvents.forEach(ev=>{
+    const ticksPerMeas = PPQ*4*(curNum/curDen);
+    const measuresElapsed = Math.round((ev.tick-curTick)/ticksPerMeas);
+    curMeasure = Math.max(1, curMeasure+measuresElapsed);
+    curTick = ev.tick; curNum=ev.num; curDen=ev.den;
+    if(finalTs[finalTs.length-1].measure===curMeasure) finalTs[finalTs.length-1]={measure:curMeasure,num:curNum,den:curDen};
+    else finalTs.push({measure:curMeasure,num:curNum,den:curDen});
+  });
+  result.timeSigChanges = finalTs;
+  if(midiTitle) result.name = midiTitle;
+  return result;
+}
+
+/* ============================================================
+   VIEW STATE
+   ============================================================ */
+const view = {
+  scrollX: 0,      // ticks
+  scrollY: 60,      // midi note offset from top (view top = note 71ish)
+  pxPerTick: 60/PPQ*8, // horizontal zoom (recompute below)
+  rowH: 16,          // vertical zoom (px per semitone row)
+  topNote: 83,        // midi note number shown at very top of grid (B5-ish)
+};
+view.pxPerTick = 0.5; // px per tick baseline
+const NOTE_MIN=21, NOTE_MAX=108; // A0..C8
+
+let mode = 'input'; // 'input' | 'select'
+let selection = new Set(); // note ids selected (within active track)
+let clipboard = [];
+let noteIdSeq = 1;
+
+/* ============================================================
+   CANVAS SETUP
+   ============================================================ */
+const kbCanvas = document.getElementById('kbCanvas');
+const gridCanvas = document.getElementById('gridCanvas');
+const flagCanvas = document.getElementById('flagCanvas');
+const rollWrap = document.getElementById('rollWrap');
+const rollScroll = document.getElementById('rollScroll');
+const KEYW = 64;
+document.documentElement.style.setProperty('--keyw', KEYW+'px');
+
+function resizeCanvases(){
+  const wrapRect = rollScroll.getBoundingClientRect();
+  const dpr = window.devicePixelRatio||1;
+  const gw = Math.max(50, wrapRect.width - KEYW - 21);
+  const gh = Math.max(50, wrapRect.height);
+  [ [kbCanvas, KEYW, gh], [gridCanvas, gw, gh] ].forEach(([cv,w,h])=>{
+    cv.style.width=w+'px'; cv.style.height=h+'px';
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    cv.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+  });
+  const pitchOverlay = document.getElementById('pitchOverlay');
+  pitchOverlay.style.width=gw+'px'; pitchOverlay.style.height=gh+'px';
+  const pitchCanvas = document.getElementById('pitchCanvas');
+  pitchCanvas.style.width=gw+'px'; pitchCanvas.style.height=gh+'px';
+  pitchCanvas.width=Math.round(gw*dpr); pitchCanvas.height=Math.round(gh*dpr);
+  pitchCanvas.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+  const flagRect = document.getElementById('flagStrip').getBoundingClientRect();
+  flagCanvas.style.width=flagRect.width+'px'; flagCanvas.style.height='20px';
+  flagCanvas.width=Math.round(flagRect.width*dpr); flagCanvas.height=Math.round(20*dpr);
+  flagCanvas.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+  drawAll();
+}
+window.addEventListener('resize', resizeCanvases);
+
+function noteName(n){
+  const names=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const oct = Math.floor(n/12)-1;
+  return names[n%12]+oct;
+}
+function isBlackKey(n){ return [1,3,6,8,10].includes(n%12); }
+
+/* ============================================================
+   DRAWING
+   ============================================================ */
+function gridTicks(){ return GRID_DIVISIONS.find(g=>g.id===song.gridDiv).ticks; }
+
+function drawKeyboard(){
+  const ctx = kbCanvas.getContext('2d');
+  const h = kbCanvas.height/(window.devicePixelRatio||1);
+  ctx.clearRect(0,0,KEYW,h);
+  const rowH = view.rowH;
+  const topNote = view.topNote;
+  const rows = Math.ceil(h/rowH)+1;
+  for(let r=0;r<rows;r++){
+    const n = topNote - r;
+    if(n<NOTE_MIN||n>NOTE_MAX) continue;
+    const y = r*rowH;
+    ctx.fillStyle = isBlackKey(n) ? '#20222a' : '#eef0f4';
+    ctx.fillRect(0,y,KEYW,rowH);
+    ctx.strokeStyle = 'rgba(0,0,0,.25)';
+    ctx.strokeRect(0,y+.5,KEYW,rowH);
+    if(n%12===0){
+      ctx.fillStyle = 'rgba(120,120,130,.9)';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(noteName(n), 6, y+rowH-4);
+    }
+  }
+}
+
+function tickToX(t){ return (t - view.scrollX)*view.pxPerTick; }
+function xToTick(x){ return x/view.pxPerTick + view.scrollX; }
+function noteToY(n){ return (view.topNote - n)*view.rowH; }
+function yToNote(y){ return Math.round(view.topNote - y/view.rowH); }
+function yToNoteFloat(y){ return view.topNote - y/view.rowH; }
+
+function drawFlagStrip(){
+  const ctx = flagCanvas.getContext('2d');
+  const w = flagCanvas.width/(window.devicePixelRatio||1);
+  ctx.clearRect(0,0,w,20);
+  ctx.fillStyle = '#2a2e38';
+  ctx.fillRect(0,0,w,20);
+
+  // faint measure tick marks for orientation
+  const gt = gridTicks();
+  const startTick = Math.max(0, Math.floor(view.scrollX/gt)*gt);
+  const endTick = view.scrollX + w/view.pxPerTick;
+  ensureMeasureCache(Math.ceil(tickToMeasure(endTick))+2);
+  ctx.strokeStyle = '#3a3f4c';
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = '#6b7180';
+  let lastMeasureDrawn = -1;
+  for(let t=startTick; t<=endTick; t+=gt){
+    const m = tickToMeasure(t);
+    const measureStart = measureStartTick(m);
+    if(Math.abs(t-measureStart)<1 && m!==lastMeasureDrawn){
+      const x = tickToX(t);
+      ctx.beginPath(); ctx.moveTo(x+.5,12); ctx.lineTo(x+.5,20); ctx.stroke();
+      ctx.fillText(String(m), x+3, 10);
+      lastMeasureDrawn = m;
+    }
+  }
+
+  // flag markers (pin/triangle), numbered left-to-right; current flag highlighted
+  song.flags.forEach((ft,idx)=>{
+    const fx = tickToX(ft);
+    if(fx<-10 || fx>w+10) return;
+    const isCur = idx===song.currentFlagIndex;
+    ctx.fillStyle = isCur ? '#ffcf8a' : '#e2a24f';
+    ctx.beginPath();
+    ctx.moveTo(fx,2); ctx.lineTo(fx+9,6); ctx.lineTo(fx,10);
+    ctx.closePath(); ctx.fill();
+    ctx.fillRect(fx-1,2,2,16);
+    ctx.font = '9px sans-serif';
+    ctx.fillText(String(idx+1), fx+2, 19);
+  });
+}
+
+function drawGrid(){
+  document.getElementById('nudgeCtrl').classList.toggle('hidden', selection.size===0);
+  const ctx = gridCanvas.getContext('2d');
+  const w = gridCanvas.width/(window.devicePixelRatio||1);
+  const h = gridCanvas.height/(window.devicePixelRatio||1);
+  ctx.clearRect(0,0,w,h);
+
+  const rowH = view.rowH;
+  const topNote = view.topNote;
+  // row backgrounds (alternate per key octave shading like image)
+  for(let n=NOTE_MAX;n>=NOTE_MIN;n--){
+    const y = noteToY(n);
+    if(y+rowH<0||y>h) continue;
+    ctx.fillStyle = isBlackKey(n) ? '#1a1c22' : '#20222b';
+    ctx.fillRect(0,y,w,rowH);
+  }
+
+  // vertical grid lines by subdivision + measure/beat emphasis
+  const gt = gridTicks();
+  const startTick = Math.max(0, Math.floor(view.scrollX/gt)*gt);
+  const endTick = view.scrollX + w/view.pxPerTick;
+  ensureMeasureCache(Math.ceil(tickToMeasure(endTick))+2);
+
+  for(let t=startTick; t<=endTick; t+=gt){
+    const x = tickToX(t);
+    const m = tickToMeasure(t);
+    const ts = tsForMeasure(m);
+    const measureStart = measureStartTick(m);
+    const beatTicks = PPQ*4/ts.den;
+    const offsetInMeasure = t - measureStart;
+    const isMeasureLine = Math.abs(offsetInMeasure) < 1;
+    const isBeatLine = Math.abs(offsetInMeasure % beatTicks) < 1;
+    ctx.strokeStyle = isMeasureLine ? '#4a5060' : (isBeatLine ? '#383d4a' : '#2a2e38');
+    ctx.lineWidth = isMeasureLine ? 1.5 : 1;
+    ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); ctx.stroke();
+  }
+
+  // ghost notes of other tracks
+  if(otherTracksMode!=='off'){
+    const fillStyle = otherTracksMode==='full' ? 'rgba(120,150,255,.42)' : 'rgba(120,150,255,.13)';
+    song.tracks.forEach((tr,ti)=>{
+      if(ti===song.activeTrack) return;
+      if(!otherTracksVisible.has(ti)) return;
+      ctx.fillStyle = fillStyle;
+      tr.notes.forEach(nt=>{
+        const x=tickToX(nt.startTick), y=noteToY(nt.pitch), wpx=nt.lengthTick*view.pxPerTick;
+        if(x+wpx<0||x>w) return;
+        ctx.fillRect(x,y+2,Math.max(2,wpx-1),rowH-4);
+      });
+    });
+  }
+
+  // active track notes
+  const tr = song.tracks[song.activeTrack];
+  const stealInfo = getVoiceStealInfo(song.activeTrack);
+  tr.notes.forEach(nt=>{
+    const x=tickToX(nt.startTick), y=noteToY(nt.pitch), wpx=nt.lengthTick*view.pxPerTick;
+    if(x+wpx<0||x>w) return;
+    const sel = selection.has(nt.id);
+    const rh = rowH-2;
+    const info = stealInfo && stealInfo.get(nt.id);
+    if(info && info.stolen){
+      const soundEndPx = tickToX(info.effectiveEnd);
+      ctx.fillStyle = sel ? '#ffffff' : '#5ec8b8';
+      ctx.strokeStyle = '#173832';
+      roundRect(ctx, x, y+1, Math.max(3,soundEndPx-x-1), rh, 3);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#5a5f6b'; // won't actually sound — cut short by voice stealing
+      ctx.fillRect(soundEndPx, y+1, Math.max(0,(x+wpx)-soundEndPx-1), rh);
+    } else {
+      ctx.fillStyle = sel ? '#ffffff' : '#5ec8b8';
+      ctx.strokeStyle = '#173832';
+      roundRect(ctx, x, y+1, Math.max(3,wpx-1), rh, 3);
+      ctx.fill(); ctx.stroke();
+    }
+  });
+
+  // flag lines
+  song.flags.forEach((ft,idx)=>{
+    const fx = tickToX(ft);
+    if(fx<-2 || fx>w+2) return;
+    const isCur = idx===song.currentFlagIndex;
+    ctx.strokeStyle = isCur ? '#ffcf8a' : 'rgba(226,162,79,.45)';
+    ctx.lineWidth = isCur ? 2 : 1;
+    ctx.beginPath(); ctx.moveTo(fx,0); ctx.lineTo(fx,h); ctx.stroke();
+  });
+
+  // playhead
+  if(playing){
+    const px = tickToX(playheadTick);
+    if(px>=-2&&px<=w+2){
+      ctx.strokeStyle = '#e2564f'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(px,0); ctx.lineTo(px,h); ctx.stroke();
+    }
+  }
+
+  // in-progress note drag preview
+  if(dragNote){
+    const {startTick,lengthTick,pitch}=dragNote;
+    const x=tickToX(startTick), y=noteToY(pitch), wpx=lengthTick*view.pxPerTick;
+    ctx.fillStyle='rgba(226,162,79,.85)';
+    roundRect(ctx,x,y+1,Math.max(3,wpx-1),rowH-2,3); ctx.fill();
+  }
+  // selection rectangle preview
+  if(selRect){
+    ctx.fillStyle='rgba(94,200,184,.18)';
+    ctx.strokeStyle='rgba(94,200,184,.8)';
+    const xa=tickToX(selRect.tick0), xb=tickToX(selRect.tick1);
+    const ya=noteToY(selRect.pf0), yb=noteToY(selRect.pf1);
+    const rx=Math.min(xa,xb), ry=Math.min(ya,yb);
+    const rw=Math.abs(xb-xa), rh2=Math.abs(yb-ya);
+    ctx.fillRect(rx,ry,rw,rh2); ctx.strokeRect(rx,ry,rw,rh2);
+  }
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+function updateScrollbars(){
+  const gh = gridCanvas.height/(window.devicePixelRatio||1);
+  const gw = gridCanvas.width/(window.devicePixelRatio||1);
+  const totalRows = NOTE_MAX-NOTE_MIN+1;
+  const visRows = gh/view.rowH;
+  const vThumb = document.getElementById('vScrollThumb');
+  const vTrackH = document.getElementById('vScrollTrack').clientHeight;
+  const vFrac = Math.min(1, visRows/totalRows);
+  vThumb.style.height = Math.max(24, vTrackH*vFrac)+'px';
+  const vScrollFrac = (NOTE_MAX-view.topNote)/(totalRows-visRows||1);
+  vThumb.style.top = Math.max(0,Math.min(1,vScrollFrac))*(vTrackH-vThumb.offsetHeight)+'px';
+
+  const totalTicks = Math.max(measureStartTick(64), view.scrollX+gw/view.pxPerTick+PPQ*4);
+  const visTicks = gw/view.pxPerTick;
+  const hThumb = document.getElementById('hScrollThumb');
+  const hTrackW = document.getElementById('hScrollTrack').clientWidth;
+  const hFrac = Math.min(1, visTicks/totalTicks);
+  hThumb.style.width = Math.max(24, hTrackW*hFrac)+'px';
+  const hScrollFrac = view.scrollX/(totalTicks-visTicks||1);
+  hThumb.style.left = Math.max(0,Math.min(1,hScrollFrac))*(hTrackW-hThumb.offsetWidth)+'px';
+}
+
+function drawAll(){
+  drawKeyboard(); drawGrid(); drawFlagStrip(); updateScrollbars();
+  updateTrackGridUI(); updatePosLabel(); updateTimesigLabel(); updateFlagIdxLabel();
+  if(pitchEditMode) drawPitchOverlay();
+}
+
+/* ============================================================
+   POINTER INTERACTION — grid (note input / select)
+   ============================================================ */
+let longPressTimer=null;
+let dragNote=null;      // note being created via long-press
+let selRect=null;       // rubber-band select rect (grid-canvas local px)
+let dragMoveInfo=null;  // moving selected notes
+let pointerDownInfo=null;
+let otherTracksMode='off'; // 'off' | 'dim' | 'full'
+let otherTracksVisible = new Set(Array.from({length:16},(_,i)=>i)); // which tracks participate when mode!=='off'
+
+function snapTick(t){ const gt=gridTicks(); return Math.round(t/gt)*gt; }
+function floorTick(t){ const gt=gridTicks(); return Math.floor(t/gt)*gt; }
+
+gridCanvas.addEventListener('pointerdown', onGridDown);
+gridCanvas.addEventListener('pointermove', onGridMove);
+window.addEventListener('pointerup', onGridUp);
+window.addEventListener('pointercancel', onGridUp);
+
+function localPos(e){
+  const r = gridCanvas.getBoundingClientRect();
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+
+function hitTestNote(tick,pitch){
+  const tr = song.tracks[song.activeTrack];
+  const tolTicks = 7/view.pxPerTick; // ~7px of forgiveness in either direction, more at lower zoom
+  for(let i=tr.notes.length-1;i>=0;i--){
+    const nt=tr.notes[i];
+    if(pitch===nt.pitch && tick>=nt.startTick-tolTicks && tick<nt.startTick+nt.lengthTick+tolTicks) return nt;
+  }
+  return null;
+}
+
+let resizeInfo=null; // resizing an existing note (possibly several, if part of a selection)
+const LONG_PRESS_MS = 200;
+const MOVE_THRESHOLD_PX = 4;
+
+/* ---- undo/redo: snapshot the active-track-agnostic full note set before any gesture that
+   might mutate it, and push onto the undo stack only if something actually changed ---- */
+let undoStack=[], redoStack=[];
+let gestureUndoBefore=null;
+function snapshotNotes(){ return JSON.stringify(song.tracks.map(t=>t.notes)); }
+function restoreNotes(snap){
+  const arr = JSON.parse(snap);
+  song.tracks.forEach((t,i)=>{ t.notes = arr[i]; });
+  selection.clear();
+}
+function pushUndoIfChanged(before){
+  const after = snapshotNotes();
+  if(after!==before){
+    undoStack.push(before);
+    if(undoStack.length>60) undoStack.shift();
+    redoStack=[];
+    invalidateVoiceStealCache(song.activeTrack);
+  }
+}
+document.getElementById('undoBtn').onclick=()=>{
+  if(!undoStack.length) return;
+  redoStack.push(snapshotNotes());
+  restoreNotes(undoStack.pop());
+  invalidateVoiceStealCache();
+  drawGrid();
+};
+document.getElementById('redoBtn').onclick=()=>{
+  if(!redoStack.length) return;
+  undoStack.push(snapshotNotes());
+  restoreNotes(redoStack.pop());
+  invalidateVoiceStealCache();
+  drawGrid();
+};
+
+/* ---- live preview while creating/dragging a note: sustained tone, retriggered on pitch
+   change, stopped exactly when the finger lifts ---- */
+let livePreview=null;
+function startLivePreview(trackIdx, pitch){
+  ensureAudio();
+  stopLivePreview();
+  const handle = triggerNote(trackIdx, actx.currentTime, pitch, 100, 4.0, false);
+  livePreview = handle || null;
+}
+function stopLivePreview(){
+  if(!livePreview) return;
+  try{ stopVoiceHandle(livePreview, actx.currentTime); }catch(err){ /* already ended */ }
+  livePreview=null;
+}
+
+function onGridDown(e){
+  gridCanvas.setPointerCapture(e.pointerId);
+  const p = localPos(e);
+  const tick = xToTick(p.x);
+  const pitch = yToNote(p.y);
+  const hitNote = hitTestNote(tick,pitch);
+
+  gestureUndoBefore = snapshotNotes();
+  lastPointerPos = p;
+  pointerDownInfo = {p, tick, pitch, hitNote, moved:false, t0:performance.now()};
+
+  if(hitNote){
+    const noteStartX = tickToX(hitNote.startTick);
+    const noteWidthPx = hitNote.lengthTick*view.pxPerTick;
+    pointerDownInfo.half = (p.x - noteStartX) >= noteWidthPx/2 ? 'right' : 'left';
+    return; // resolved on move (drag -> move/resize) or up (tap -> select/delete)
+  }
+
+  if(mode==='input'){
+    longPressTimer = setTimeout(()=>{
+      const startTick = floorTick(tick);
+      dragNote = {startTick, lengthTick:gridTicks(), pitch, id:null};
+      drawGrid();
+      navigator.vibrate && navigator.vibrate(10);
+      startLivePreview(song.activeTrack, pitch);
+    }, LONG_PRESS_MS);
+  } else { // select mode: long-press starts rubber band
+    longPressTimer = setTimeout(()=>{
+      selRect = {tick0:xToTick(p.x), pf0:yToNoteFloat(p.y), tick1:xToTick(p.x), pf1:yToNoteFloat(p.y)};
+      drawGrid();
+      navigator.vibrate && navigator.vibrate(10);
+      startSelRectAutoscroll();
+    }, LONG_PRESS_MS);
+  }
+}
+
+function floorLengthToPointer(startTick, pointerTick){
+  const gt = gridTicks();
+  const units = Math.floor((pointerTick - startTick)/gt);
+  return Math.max(gt, (units+1)*gt);
+}
+
+let lastPointerPos=null;
+function onGridMove(e){
+  const p = localPos(e);
+  lastPointerPos = p;
+  if(!pointerDownInfo) return;
+  const justCrossed = !pointerDownInfo.moved && (Math.abs(p.x-pointerDownInfo.p.x)>MOVE_THRESHOLD_PX || Math.abs(p.y-pointerDownInfo.p.y)>MOVE_THRESHOLD_PX);
+  if(justCrossed) pointerDownInfo.moved = true;
+
+  // dragging an existing note: decide move vs resize on first real movement
+  if(pointerDownInfo.hitNote && pointerDownInfo.moved){
+    clearTimeout(longPressTimer);
+    const tr = song.tracks[song.activeTrack];
+    if(pointerDownInfo.half==='right'){
+      if(!resizeInfo){
+        const nt0 = pointerDownInfo.hitNote;
+        const ids = selection.has(nt0.id) ? [...selection] : [nt0.id];
+        const startLengths = {};
+        ids.forEach(id=>{ const n=tr.notes.find(n=>n.id===id); if(n) startLengths[id]=n.lengthTick; });
+        resizeInfo = {note:nt0, ids, startLengths};
+        startResizeAutoscroll();
+      }
+      updateResizePositions(xToTick(p.x));
+      drawGrid();
+      return;
+    } else {
+      if(!dragMoveInfo){
+        const nt = pointerDownInfo.hitNote;
+        dragMoveInfo = {noteIds:[...(selection.has(nt.id)?selection:[nt.id])], moved:false, startPositions:null, lastDPitch:0};
+        startDragMoveAutoscroll();
+      }
+      updateDragMovePositions(xToTick(p.x), yToNote(p.y));
+      drawGrid();
+      return;
+    }
+  }
+
+  if(dragNote){
+    const tick = xToTick(p.x), pitch = yToNote(p.y);
+    dragNote.lengthTick = floorLengthToPointer(dragNote.startTick, tick);
+    if(pitch !== dragNote.pitch){
+      dragNote.pitch = pitch;
+      startLivePreview(song.activeTrack, pitch);
+    }
+    drawGrid();
+    return;
+  }
+  if(selRect){
+    selRect.tick1=xToTick(p.x); selRect.pf1=yToNoteFloat(p.y);
+    drawGrid();
+  }
+}
+
+function onGridUp(e){
+  if(!pointerDownInfo){ return; }
+  clearTimeout(longPressTimer);
+
+  if(resizeInfo){
+    stopResizeAutoscroll();
+    resizeInfo=null; drawGrid();
+  } else if(dragMoveInfo){
+    stopDragMoveAutoscroll();
+    dragMoveInfo=null; drawGrid();
+  } else if(pointerDownInfo.hitNote && !pointerDownInfo.moved){
+    // simple tap on a note (no drag happened): toggle select, or delete whole selection if it was already selected
+    const nt = pointerDownInfo.hitNote;
+    if(selection.has(nt.id)){
+      const tr = song.tracks[song.activeTrack];
+      tr.notes = tr.notes.filter(n=>!selection.has(n.id));
+      selection.clear();
+    } else {
+      selection.add(nt.id); // silent — selecting a note shouldn't make sound
+    }
+    drawGrid();
+  } else if(dragNote){
+    dragNote.id = noteIdSeq++;
+    song.tracks[song.activeTrack].notes.push({...dragNote});
+    dragNote=null; drawGrid();
+  } else if(selRect){
+    stopSelRectAutoscroll();
+    const tr = song.tracks[song.activeTrack];
+    const xa=tickToX(selRect.tick0), xb=tickToX(selRect.tick1);
+    const ya=noteToY(selRect.pf0), yb=noteToY(selRect.pf1);
+    const x0=Math.min(xa,xb), x1=Math.max(xa,xb);
+    const y0=Math.min(ya,yb), y1=Math.max(ya,yb);
+    tr.notes.forEach(nt=>{
+      const nx=tickToX(nt.startTick), ny=noteToY(nt.pitch), nw=nt.lengthTick*view.pxPerTick;
+      if(nx+nw>=x0 && nx<=x1 && ny+view.rowH>=y0 && ny<=y1) selection.add(nt.id);
+    });
+    selRect=null; drawGrid();
+  } else if(!pointerDownInfo.hitNote && !pointerDownInfo.moved && selection.size){
+    // tapped empty piano-roll space in select mode: clear the current selection
+    selection.clear();
+    drawGrid();
+  }
+  // whatever gesture just ended, nothing from it should still be ringing once the finger is up
+  stopLivePreview();
+  stopAllPreviewVoices();
+  pushUndoIfChanged(gestureUndoBefore);
+  pointerDownInfo=null;
+}
+
+/* ---- edge autoscroll while a rubber-band selection is being dragged (that gesture eats all
+   other input, so the shadow scrollbars can't be used at the same time) ---- */
+let selRectAutoTimer=null;
+function startSelRectAutoscroll(){
+  if(selRectAutoTimer) return;
+  selRectAutoTimer = setInterval(()=>{
+    if(!selRect || !lastPointerPos) return;
+    const gw = gridCanvas.width/(window.devicePixelRatio||1);
+    const gh = gridCanvas.height/(window.devicePixelRatio||1);
+    const EDGE=36, SPEED=16;
+    let moved=false;
+    if(lastPointerPos.x < EDGE){ view.scrollX = Math.max(0, view.scrollX - SPEED/view.pxPerTick); moved=true; }
+    else if(lastPointerPos.x > gw-EDGE){ view.scrollX += SPEED/view.pxPerTick; moved=true; }
+    if(lastPointerPos.y < EDGE){ view.topNote = Math.min(NOTE_MAX, view.topNote+1); moved=true; }
+    else if(lastPointerPos.y > gh-EDGE){ view.topNote = Math.max(NOTE_MIN, view.topNote-1); moved=true; }
+    if(moved){ selRect.tick1=xToTick(lastPointerPos.x); selRect.pf1=yToNoteFloat(lastPointerPos.y); drawAll(); }
+  }, 40);
+}
+function stopSelRectAutoscroll(){ clearInterval(selRectAutoTimer); selRectAutoTimer=null; }
+
+/* Applies the current pointer position (in tick/pitch terms) to all notes being dragged.
+   Shared by the normal pointermove handler and the edge-autoscroll timer below, so moving a
+   selection still works correctly even while the view is auto-scrolling underneath it. */
+function updateDragMovePositions(tick, pitch){
+  const tr = song.tracks[song.activeTrack];
+  const dTick = snapTick(tick - pointerDownInfo.tick);
+  const dPitch = pitch - pointerDownInfo.pitch;
+  if(!dragMoveInfo.startPositions){
+    dragMoveInfo.startPositions = dragMoveInfo.noteIds.map(id=>{
+      const nt2 = tr.notes.find(n=>n.id===id);
+      return {id, startTick:nt2.startTick, pitch:nt2.pitch};
+    });
+  }
+  dragMoveInfo.startPositions.forEach(sp=>{
+    const nt2 = tr.notes.find(n=>n.id===sp.id);
+    if(!nt2) return;
+    nt2.startTick = Math.max(0, sp.startTick + dTick);
+    nt2.pitch = Math.max(NOTE_MIN, Math.min(NOTE_MAX, sp.pitch + dPitch));
+  });
+  if(dPitch !== dragMoveInfo.lastDPitch){
+    dragMoveInfo.lastDPitch = dPitch;
+    // sound the leftmost selected note at its new pitch
+    const leftmost = dragMoveInfo.startPositions.reduce((a,b)=> a.startTick<=b.startTick?a:b);
+    const ntL = tr.notes.find(n=>n.id===leftmost.id);
+    if(ntL) playPreview(song.activeTrack, ntL.pitch);
+  }
+  dragMoveInfo.moved = true;
+}
+/* ---- edge autoscroll while moving a selection: same idea as the rubber-band one above,
+   but for dragged notes, and horizontal-only as requested ---- */
+let dragMoveAutoTimer=null;
+function startDragMoveAutoscroll(){
+  if(dragMoveAutoTimer) return;
+  dragMoveAutoTimer = setInterval(()=>{
+    if(!dragMoveInfo || !lastPointerPos) return;
+    const gw = gridCanvas.width/(window.devicePixelRatio||1);
+    const EDGE=36, SPEED=16;
+    let moved=false;
+    if(lastPointerPos.x < EDGE){ view.scrollX = Math.max(0, view.scrollX - SPEED/view.pxPerTick); moved=true; }
+    else if(lastPointerPos.x > gw-EDGE){ view.scrollX += SPEED/view.pxPerTick; moved=true; }
+    if(moved){
+      updateDragMovePositions(xToTick(lastPointerPos.x), yToNote(lastPointerPos.y));
+      drawAll();
+    }
+  }, 40);
+}
+function stopDragMoveAutoscroll(){ clearInterval(dragMoveAutoTimer); dragMoveAutoTimer=null; }
+
+/* Same idea for note resizing (dragging a note's right edge) — extracted so both the normal
+   pointermove handler and the edge-autoscroll timer can share it. */
+function updateResizePositions(pointerTick){
+  const tr = song.tracks[song.activeTrack];
+  const newLen = floorLengthToPointer(resizeInfo.note.startTick, pointerTick);
+  const deltaUnits = Math.round((newLen - resizeInfo.startLengths[resizeInfo.note.id]) / gridTicks());
+  resizeInfo.ids.forEach(id=>{
+    const n = tr.notes.find(n=>n.id===id);
+    if(!n) return;
+    n.lengthTick = Math.max(gridTicks(), resizeInfo.startLengths[id] + deltaUnits*gridTicks());
+  });
+}
+let resizeAutoTimer=null;
+function startResizeAutoscroll(){
+  if(resizeAutoTimer) return;
+  resizeAutoTimer = setInterval(()=>{
+    if(!resizeInfo || !lastPointerPos) return;
+    const gw = gridCanvas.width/(window.devicePixelRatio||1);
+    const EDGE=36, SPEED=16;
+    let moved=false;
+    if(lastPointerPos.x < EDGE){ view.scrollX = Math.max(0, view.scrollX - SPEED/view.pxPerTick); moved=true; }
+    else if(lastPointerPos.x > gw-EDGE){ view.scrollX += SPEED/view.pxPerTick; moved=true; }
+    if(moved){
+      updateResizePositions(xToTick(lastPointerPos.x));
+      drawAll();
+    }
+  }, 40);
+}
+function stopResizeAutoscroll(){ clearInterval(resizeAutoTimer); resizeAutoTimer=null; }
+
+/* ---- scroll via drag on grid with two fingers reserved; use shadow scrollbars + wheel/touch on grid itself for pan ---- */
+gridCanvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  view.scrollX = Math.max(0, view.scrollX + e.deltaX/view.pxPerTick + (e.shiftKey? e.deltaY/view.pxPerTick:0));
+  view.topNote = Math.max(NOTE_MIN, Math.min(NOTE_MAX, view.topNote + Math.sign(e.deltaY)* (e.shiftKey?0:1)));
+  drawAll();
+},{passive:false});
+
+/* Drag must START inside the shadow strip, but once started it keeps tracking the finger
+   even if it leaves the strip's bounds (pointer capture). Panning is a direct 1:1 pixel
+   mapping using the current zoom. Vertical position is always kept an integer semitone
+   (fractional values broke black/white key coloring). On release, velocity carries on as
+   a decelerating inertia scroll instead of stopping dead. */
+function bindPanArea(trackEl, opts){
+  let dragging=false, lastX=0, lastY=0, lastT=0, vx=0, vy=0;
+  let inertiaRAF=null;
+  let vTopNoteAccum = view.topNote; // fractional accumulator so small vertical moves aren't rounded away every event
+  function stopInertia(){ if(inertiaRAF){ cancelAnimationFrame(inertiaRAF); inertiaRAF=null; } }
+  function applyPan(dx,dy){
+    if(opts.horizontal) view.scrollX = Math.max(0, view.scrollX - dx/view.pxPerTick);
+    if(opts.vertical){
+      vTopNoteAccum = Math.max(NOTE_MIN, Math.min(NOTE_MAX, vTopNoteAccum + dy/view.rowH));
+      view.topNote = Math.round(vTopNoteAccum);
+    }
+  }
+  function runInertia(){
+    vx*=0.95; vy*=0.95;
+    if(Math.abs(vx)<0.015 && Math.abs(vy)<0.015){ inertiaRAF=null; return; }
+    applyPan(vx*16, vy*16);
+    drawAll();
+    inertiaRAF = requestAnimationFrame(runInertia);
+  }
+  trackEl.addEventListener('pointerdown', e=>{
+    stopInertia();
+    dragging=true; lastX=e.clientX; lastY=e.clientY; lastT=performance.now(); vx=0; vy=0;
+    vTopNoteAccum = view.topNote; // resync to the current (rounded) position at the start of each gesture
+    trackEl.setPointerCapture && trackEl.setPointerCapture(e.pointerId);
+  });
+  trackEl.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const now=performance.now();
+    const dt=Math.max(1, now-lastT);
+    const dx=e.clientX-lastX, dy=e.clientY-lastY;
+    vx = dx/dt; vy = dy/dt;
+    lastX=e.clientX; lastY=e.clientY; lastT=now;
+    applyPan(dx,dy);
+    drawAll();
+  });
+  const release = ()=>{
+    if(!dragging) return;
+    dragging=false;
+    if(Math.abs(vx)>0.02 || Math.abs(vy)>0.02){ inertiaRAF = requestAnimationFrame(runInertia); }
+  };
+  trackEl.addEventListener('pointerup', release);
+  trackEl.addEventListener('pointercancel', release);
+}
+bindPanArea(document.getElementById('hScrollTrack'), {horizontal:true, vertical:false});
+bindPanArea(document.getElementById('vScrollTrack'), {horizontal:true, vertical:true});
+
+/* ============================================================
+   PITCH CURVE EDITOR
+   Freehand-drawn pitch bends stored per-note as note.pitchCurve =
+   [{t, semi}, ...] where t is 0..1 within that note's duration and
+   semi is the pitch offset in semitones at that point. A single
+   drawn stroke can span multiple notes; it's split at note boundaries.
+   The overlay's vertical axis uses the exact same semitone-row scale
+   as the piano roll (noteToY/yToNoteFloat), so a drawn line visually
+   lines up with the keyboard on the left.
+   ============================================================ */
+let pitchEditMode=false;
+let pitchStroke=null; // raw {x,y} points being captured
+const pitchCanvas = document.getElementById('pitchCanvas');
+const pitchOverlayEl = document.getElementById('pitchOverlay');
+
+document.getElementById('pitchCurveBtn').onclick=(e)=>{
+  pitchEditMode = !pitchEditMode;
+  e.currentTarget.classList.toggle('active', pitchEditMode);
+  pitchOverlayEl.classList.toggle('hidden', !pitchEditMode);
+  document.getElementById('pitchClearBtn').style.display = pitchEditMode ? '' : 'none';
+  document.getElementById('vibratoBtn').style.display = pitchEditMode ? '' : 'none';
+  updatePitchOverlayInteractivity();
+  if(pitchEditMode) drawPitchOverlay();
+};
+/* The overlay only captures pointer input (for drawing) while in input mode. In select mode
+   it becomes click-through so the normal rubber-band multi-select on the grid underneath still
+   works — pitch curves stay visible (frosted glass) but aren't editable at that moment. */
+function updatePitchOverlayInteractivity(){
+  const shouldCapture = pitchEditMode && mode==='input';
+  pitchOverlayEl.style.pointerEvents = shouldCapture ? 'auto' : 'none';
+}
+document.getElementById('pitchClearBtn').onclick=()=>{
+  const tr = song.tracks[song.activeTrack];
+  const before = snapshotNotes();
+  tr.notes.forEach(nt=>{ if(selection.has(nt.id)) delete nt.pitchCurve; });
+  pushUndoIfChanged(before);
+  drawPitchOverlay(); drawGrid();
+};
+document.getElementById('vibratoBtn').onclick=()=>{
+  if(!selection.size){ showToast('先にノーツを選択してください'); return; }
+  openOverlay('vibratoOverlay');
+};
+document.getElementById('vibratoDepthSlider').oninput=(e)=>{
+  document.getElementById('vibratoDepthVal').textContent = (+e.target.value).toFixed(2);
+};
+document.getElementById('vibratoSpeedSlider').oninput=(e)=>{
+  document.getElementById('vibratoSpeedVal').textContent = (+e.target.value).toFixed(1);
+};
+document.getElementById('vibratoDelaySlider').oninput=(e)=>{
+  document.getElementById('vibratoDelayVal').textContent = (+e.target.value).toFixed(2);
+};
+document.getElementById('vibratoApply').onclick=()=>{
+  const depth = +document.getElementById('vibratoDepthSlider').value;
+  const perBeat = +document.getElementById('vibratoSpeedSlider').value;
+  const delay = +document.getElementById('vibratoDelaySlider').value;
+  const tr = song.tracks[song.activeTrack];
+  const before = snapshotNotes();
+  tr.notes.forEach(nt=>{ if(selection.has(nt.id)) nt.vibrato = {depth, perBeat, delay}; });
+  pushUndoIfChanged(before);
+  closeOverlay('vibratoOverlay');
+  reschedulePlaybackNow();
+};
+document.getElementById('vibratoRemove').onclick=()=>{
+  const tr = song.tracks[song.activeTrack];
+  const before = snapshotNotes();
+  tr.notes.forEach(nt=>{ if(selection.has(nt.id)) delete nt.vibrato; });
+  pushUndoIfChanged(before);
+  closeOverlay('vibratoOverlay');
+  reschedulePlaybackNow();
+};
+
+/* ---- track waveform view: read-only preview of the active track's Retro Synth cycle
+   (other instrument types don't have a single-cycle waveform to show) ---- */
+let trackWaveformViewOn = false;
+let waveformViewRAF = null;
+document.getElementById('waveformViewBtn').onclick=(e)=>{
+  trackWaveformViewOn = !trackWaveformViewOn;
+  e.currentTarget.classList.toggle('active', trackWaveformViewOn);
+  document.getElementById('trackWaveformPanel').classList.toggle('hidden', !trackWaveformViewOn);
+  if(trackWaveformViewOn) startWaveformViewLoop(); else stopWaveformViewLoop();
+};
+let waveformZoom = 3;
+function startWaveformViewLoop(){
+  if(waveformViewRAF) return;
+  const canvas = document.getElementById('trackWaveformCanvas');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width||200, h = rect.height||60;
+  canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  function frame(){
+    if(!trackWaveformViewOn){ waveformViewRAF=null; return; }
+    document.getElementById('trackWaveformLabel').textContent = 'Track '+(song.activeTrack+1)+' 波形(リアルタイム)';
+    ctx.clearRect(0,0,w,h);
+    const tn = trackNodes[song.activeTrack];
+    if(!tn || !tn.analyser){
+      ctx.fillStyle='#888'; ctx.font='11px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('再生すると波形が表示されます', w/2, h/2+4);
+      waveformViewRAF = requestAnimationFrame(frame);
+      return;
+    }
+    const analyser = tn.analyser;
+    const data = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(data);
+    // find a rising zero-crossing to "trigger" on, like a real oscilloscope — otherwise the
+    // waveform's phase drifts randomly every frame and looks like blurry noise even for a
+    // perfectly steady tone. Centered: half the display window sits before the crossing, half after.
+    const usableLen = Math.floor(data.length/2);
+    const half = Math.floor(usableLen/2);
+    let triggerIdx = half; // fallback: no crossing found, just show the buffer's middle
+    for(let i=Math.max(1,half); i<data.length-half-1; i++){
+      if(data[i-1]<0 && data[i]>=0){ triggerIdx=i; break; }
+    }
+    ctx.strokeStyle='#5ec8b8'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for(let i=0;i<usableLen;i++){
+      const sample = data[triggerIdx-half+i] ?? 0;
+      const x = (i/usableLen)*w;
+      const y = h/2 - sample*(h/2)*0.95*waveformZoom;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    waveformViewRAF = requestAnimationFrame(frame);
+  }
+  waveformViewRAF = requestAnimationFrame(frame);
+}
+function stopWaveformViewLoop(){
+  if(waveformViewRAF){ cancelAnimationFrame(waveformViewRAF); waveformViewRAF=null; }
+}
+const waveformPanelEl = document.getElementById('trackWaveformPanel');
+let waveformPanelDragging=false, waveformPanelLongPressTimer=null;
+let waveformPanelStartX=0, waveformPanelStartY=0, waveformPanelOrigLeft=0, waveformPanelOrigTop=0, waveformPanelMoved=false;
+waveformPanelEl.addEventListener('pointerdown', e=>{
+  if(e.target.id==='waveformZoomSlider') return;
+  waveformPanelStartX=e.clientX; waveformPanelStartY=e.clientY; waveformPanelMoved=false;
+  const rect = waveformPanelEl.getBoundingClientRect();
+  const wrapRect = document.getElementById('rollWrap').getBoundingClientRect();
+  waveformPanelOrigLeft = rect.left - wrapRect.left;
+  waveformPanelOrigTop = rect.top - wrapRect.top;
+  waveformPanelLongPressTimer = setTimeout(()=>{
+    waveformPanelDragging = true;
+    waveformPanelEl.style.right = 'auto';
+    waveformPanelEl.style.left = waveformPanelOrigLeft+'px';
+    waveformPanelEl.style.top = waveformPanelOrigTop+'px';
+    navigator.vibrate && navigator.vibrate(10);
+  }, 400);
+  waveformPanelEl.setPointerCapture(e.pointerId);
+});
+waveformPanelEl.addEventListener('pointermove', e=>{
+  if(Math.abs(e.clientX-waveformPanelStartX)>6 || Math.abs(e.clientY-waveformPanelStartY)>6) waveformPanelMoved=true;
+  if(!waveformPanelDragging) return;
+  const wrapRect = document.getElementById('rollWrap').getBoundingClientRect();
+  const dx = e.clientX-waveformPanelStartX, dy = e.clientY-waveformPanelStartY;
+  const panelW = waveformPanelEl.offsetWidth, panelH = waveformPanelEl.offsetHeight;
+  const newLeft = Math.max(0, Math.min(wrapRect.width-panelW, waveformPanelOrigLeft+dx));
+  const newTop = Math.max(0, Math.min(wrapRect.height-panelH, waveformPanelOrigTop+dy));
+  waveformPanelEl.style.left = newLeft+'px';
+  waveformPanelEl.style.top = newTop+'px';
+});
+function endWaveformPanelPointer(){
+  clearTimeout(waveformPanelLongPressTimer);
+  if(!waveformPanelDragging && !waveformPanelMoved){
+    const row = document.getElementById('waveformZoomRow');
+    row.style.display = row.style.display==='none' ? 'flex' : 'none';
+  }
+  waveformPanelDragging=false;
+}
+waveformPanelEl.addEventListener('pointerup', endWaveformPanelPointer);
+waveformPanelEl.addEventListener('pointercancel', ()=>{ clearTimeout(waveformPanelLongPressTimer); waveformPanelDragging=false; });
+document.getElementById('waveformZoomSlider').oninput=(e)=>{ waveformZoom = +e.target.value; };
+
+/* Ramer-Douglas-Peucker simplification: keeps only the points needed to represent
+   the stroke's essential shape ("頂点+α") instead of every raw sampled pixel. The
+   stroke's own first/last raw points are always kept exactly (RDP's base case). */
+function rdpSimplify(points, epsilon){
+  if(points.length<3) return points.slice();
+  function perpDist(p, a, b){
+    const dx=b.x-a.x, dy=b.y-a.y;
+    const len = Math.hypot(dx,dy)||1;
+    return Math.abs((p.x-a.x)*dy - (p.y-a.y)*dx)/len;
+  }
+  function rdp(pts){
+    if(pts.length<3) return pts;
+    let maxD=0, idx=0;
+    for(let i=1;i<pts.length-1;i++){
+      const d = perpDist(pts[i], pts[0], pts[pts.length-1]);
+      if(d>maxD){ maxD=d; idx=i; }
+    }
+    if(maxD>epsilon){
+      const left = rdp(pts.slice(0,idx+1));
+      const right = rdp(pts.slice(idx));
+      return left.slice(0,-1).concat(right);
+    }
+    return [pts[0], pts[pts.length-1]];
+  }
+  return rdp(points);
+}
+
+function pitchOverlayLocalPos(e){
+  const r = pitchCanvas.getBoundingClientRect();
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+
+pitchCanvas.addEventListener('pointerdown', e=>{
+  if(!pitchEditMode) return;
+  pitchCanvas.setPointerCapture(e.pointerId);
+  gestureUndoBefore = snapshotNotes();
+  pitchStroke = [pitchOverlayLocalPos(e)];
+});
+pitchCanvas.addEventListener('pointermove', e=>{
+  if(!pitchEditMode || !pitchStroke) return;
+  const p = pitchOverlayLocalPos(e);
+  const last = pitchStroke[pitchStroke.length-1];
+  if(Math.hypot(p.x-last.x, p.y-last.y) >= 2){ pitchStroke.push(p); drawPitchOverlay(); }
+});
+function finishPitchStroke(){
+  if(!pitchStroke) return;
+  if(pitchStroke.length>=2) commitPitchStroke(pitchStroke);
+  pitchStroke=null;
+  pushUndoIfChanged(gestureUndoBefore);
+  drawPitchOverlay();
+}
+pitchCanvas.addEventListener('pointerup', finishPitchStroke);
+pitchCanvas.addEventListener('pointercancel', finishPitchStroke);
+
+/* Linear-interpolates the drawn stroke's absolute pitch at an arbitrary tick — used to find
+   the true value at a note's start/end boundary even when that exact tick wasn't one of the
+   simplified vertices, instead of just copying the nearest kept vertex (which caused the
+   reported start/end drift). Clamps (doesn't extrapolate) past the stroke's own ends. */
+function interpPitchAt(curvePts, tick){
+  if(tick<=curvePts[0].tick) return curvePts[0].pitchAbs;
+  if(tick>=curvePts[curvePts.length-1].tick) return curvePts[curvePts.length-1].pitchAbs;
+  for(let i=0;i<curvePts.length-1;i++){
+    const a=curvePts[i], b=curvePts[i+1];
+    if(tick>=a.tick && tick<=b.tick){
+      const f = (b.tick-a.tick)>0 ? (tick-a.tick)/(b.tick-a.tick) : 0;
+      return a.pitchAbs + (b.pitchAbs-a.pitchAbs)*f;
+    }
+  }
+  return curvePts[curvePts.length-1].pitchAbs;
+}
+
+/* Merges a newly-drawn segment into a note's existing pitch curve, keeping whatever existing
+   points fall outside the newly-drawn t-range untouched. If there's nothing at all outside the
+   new segment (no prior curve, or drawing covers the whole note), pads the edges at 0 semitones
+   (no bend) rather than inheriting the segment's edge value flat across the untouched area. */
+function mergePitchCurve(existing, newSegment, tNewStart, tNewEnd){
+  const EPS=1e-6;
+  const kept = (existing||[]).filter(pt => pt.t < tNewStart-EPS || pt.t > tNewEnd+EPS);
+  const merged = [...kept, ...newSegment].sort((a,b)=>a.t-b.t);
+  if(!merged.length) return null;
+  if(merged[0].t>EPS) merged.unshift({t:0, semi:0});
+  if(merged[merged.length-1].t<1-EPS) merged.push({t:1, semi:0});
+  return merged;
+}
+function commitPitchStroke(rawPoints){
+  const simplified = rdpSimplify(rawPoints, 4);
+  const curvePts = simplified.map(p=>({tick: xToTick(p.x), pitchAbs: yToNoteFloat(p.y)}));
+  curvePts.sort((a,b)=>a.tick-b.tick);
+  const minTick = curvePts[0].tick, maxTick = curvePts[curvePts.length-1].tick;
+
+  const tr = song.tracks[song.activeTrack];
+  tr.notes.forEach(nt=>{
+    const noteStart=nt.startTick, noteEnd=nt.startTick+nt.lengthTick;
+    if(noteEnd<=minTick || noteStart>=maxTick) return; // stroke doesn't overlap this note
+    const clampedStart = Math.max(noteStart, minTick);
+    const clampedEnd = Math.min(noteEnd, maxTick);
+    const tNewStart = (clampedStart-noteStart)/nt.lengthTick;
+    const tNewEnd = (clampedEnd-noteStart)/nt.lengthTick;
+    const interior = curvePts.filter(pt=>pt.tick>clampedStart && pt.tick<clampedEnd)
+      .map(pt=>({t:(pt.tick-noteStart)/nt.lengthTick, semi: pt.pitchAbs-nt.pitch}));
+    const startSemi = interpPitchAt(curvePts, clampedStart)-nt.pitch;
+    const endSemi = interpPitchAt(curvePts, clampedEnd)-nt.pitch;
+    const newSegment = [{t:tNewStart, semi:startSemi}, ...interior, {t:tNewEnd, semi:endSemi}];
+    nt.pitchCurve = mergePitchCurve(nt.pitchCurve, newSegment, tNewStart, tNewEnd);
+  });
+}
+
+function drawPitchOverlay(){
+  const ctx = pitchCanvas.getContext('2d');
+  const w = pitchCanvas.width/(window.devicePixelRatio||1);
+  const h = pitchCanvas.height/(window.devicePixelRatio||1);
+  ctx.clearRect(0,0,w,h);
+
+  const tr = song.tracks[song.activeTrack];
+
+  // per-note zero-bend reference line, at that note's own actual pitch row
+  ctx.strokeStyle='rgba(255,255,255,.28)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+  tr.notes.forEach(nt=>{
+    const x0=tickToX(nt.startTick), x1=tickToX(nt.startTick+nt.lengthTick);
+    if(x1<0||x0>w) return;
+    const y = noteToY(nt.pitch)+view.rowH/2;
+    ctx.beginPath(); ctx.moveTo(Math.max(0,x0),y); ctx.lineTo(Math.min(w,x1),y); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  // existing curves
+  ctx.strokeStyle='#ffcf8a'; ctx.lineWidth=2.5;
+  tr.notes.forEach(nt=>{
+    if(!nt.pitchCurve || nt.pitchCurve.length<2) return;
+    ctx.beginPath();
+    nt.pitchCurve.forEach((pt,i)=>{
+      const tick = nt.startTick + pt.t*nt.lengthTick;
+      const x = tickToX(tick), y = noteToY(nt.pitch+pt.semi)+view.rowH/2;
+      if(x<-20 || x>w+20) return;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  });
+
+  // in-progress stroke
+  if(pitchStroke && pitchStroke.length>1){
+    ctx.strokeStyle='#5ec8b8'; ctx.lineWidth=2.5;
+    ctx.beginPath();
+    pitchStroke.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+    ctx.stroke();
+  }
+}
+
+/* flag placement: tap on flag strip. Tapping near an existing flag selects/removes it (second tap on the
+   already-current flag removes it); tapping empty space adds a new flag there. */
+flagCanvas.addEventListener('pointerdown', e=>{
+  const r = flagCanvas.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const tick = Math.max(0, snapTick(xToTick(x)));
+  let nearestIdx=-1, nearestDist=Infinity;
+  song.flags.forEach((ft,idx)=>{
+    const d = Math.abs(tickToX(ft)-x);
+    if(d<nearestDist){ nearestDist=d; nearestIdx=idx; }
+  });
+  if(nearestIdx>=0 && nearestDist<=12){
+    if(nearestIdx===song.currentFlagIndex){
+      removeFlagAt(nearestIdx);
+    } else {
+      song.currentFlagIndex = nearestIdx;
+    }
+  } else {
+    addFlag(tick);
+  }
+  drawAll();
+});
+
+/* ============================================================
+   ZOOM
+   ============================================================ */
+document.getElementById('hzIn').onclick=()=>{ view.pxPerTick*=1.3; drawAll(); };
+document.getElementById('hzOut').onclick=()=>{ view.pxPerTick=Math.max(0.018,view.pxPerTick/1.3); drawAll(); };
+document.getElementById('vzIn').onclick=()=>{ view.rowH=Math.min(40,view.rowH*1.2); drawAll(); };
+document.getElementById('vzOut').onclick=()=>{ view.rowH=Math.max(6,view.rowH/1.2); drawAll(); };
+
+/* ============================================================
+   MODE / COPY / PASTE
+   ============================================================ */
+document.getElementById('modeBtn').onclick=(e)=>{
+  mode = mode==='input' ? 'select' : 'input';
+  e.currentTarget.classList.toggle('select-mode', mode==='select');
+  e.currentTarget.textContent = mode==='select' ? '⬚' : '✎';
+  updatePitchOverlayInteractivity();
+};
+document.getElementById('copyBtn').onclick=()=>{
+  const tr = song.tracks[song.activeTrack];
+  const sel = tr.notes.filter(n=>selection.has(n.id));
+  if(!sel.length) return;
+  const minTick = Math.min(...sel.map(n=>n.startTick));
+  clipboard = sel.map(n=>({pitch:n.pitch, offset:n.startTick-minTick, lengthTick:n.lengthTick}));
+};
+document.getElementById('pasteBtn').onclick=()=>{
+  if(!clipboard.length) return;
+  const before = snapshotNotes();
+  const tr = song.tracks[song.activeTrack];
+  selection.clear();
+  clipboard.forEach(c=>{
+    const nt = {id:noteIdSeq++, pitch:c.pitch, startTick:currentFlagTick()+c.offset, lengthTick:c.lengthTick};
+    tr.notes.push(nt);
+    selection.add(nt.id);
+  });
+  pushUndoIfChanged(before);
+  drawGrid();
+};
+let nudgePreviewHandle = null;
+function stopNudgePreview(){
+  if(!nudgePreviewHandle) return;
+  try{
+    const now = actx.currentTime;
+    nudgePreviewHandle.g.gain.cancelScheduledValues(now);
+    nudgePreviewHandle.g.gain.setValueAtTime(nudgePreviewHandle.g.gain.value, now);
+    nudgePreviewHandle.g.gain.linearRampToValueAtTime(0.0001, now+0.03);
+    nudgePreviewHandle.src.stop(now+0.05);
+  }catch(err){ /* already ended */ }
+  nudgePreviewHandle = null;
+}
+function nudgeSelection(dTickUnits, dPitch){
+  if(!selection.size) return;
+  const before = snapshotNotes();
+  const tr = song.tracks[song.activeTrack];
+  const gt = gridTicks();
+  tr.notes.forEach(nt=>{
+    if(!selection.has(nt.id)) return;
+    if(dTickUnits) nt.startTick = Math.max(0, nt.startTick + dTickUnits*gt);
+    if(dPitch) nt.pitch = Math.max(NOTE_MIN, Math.min(NOTE_MAX, nt.pitch + dPitch));
+  });
+  pushUndoIfChanged(before);
+  ensureAudio();
+  stopNudgePreview();
+  const selNotes = tr.notes.filter(n=>selection.has(n.id));
+  if(selNotes.length){
+    const leftmost = selNotes.reduce((a,b)=> a.startTick<=b.startTick?a:b);
+    const dur = tickSpanSeconds(leftmost.startTick, leftmost.startTick+leftmost.lengthTick);
+    nudgePreviewHandle = triggerNote(song.activeTrack, actx.currentTime, leftmost.pitch, 100, dur, false, leftmost.pitchCurve, resolveVibratoHz(leftmost.vibrato, leftmost.startTick), leftmost.startTick);
+  }
+  drawGrid();
+}
+document.getElementById('nudgeLeft').onclick=()=>nudgeSelection(-1,0);
+document.getElementById('nudgeRight').onclick=()=>nudgeSelection(1,0);
+document.getElementById('nudgeUp').onclick=()=>nudgeSelection(0,1);
+document.getElementById('nudgeDown').onclick=()=>nudgeSelection(0,-1);
+document.getElementById('showOtherTracksBtn').onclick=(e)=>{
+  otherTracksMode = otherTracksMode==='off' ? 'dim' : otherTracksMode==='dim' ? 'full' : 'off';
+  e.currentTarget.dataset.mode = otherTracksMode;
+  drawGrid();
+};
+
+/* ============================================================
+   NAV BAR (measure jump; view only, per spec)
+   ============================================================ */
+function refreshActiveDragAfterViewJump(){
+  if(selRect && lastPointerPos){
+    selRect.tick1 = xToTick(lastPointerPos.x);
+    selRect.pf1 = yToNoteFloat(lastPointerPos.y);
+  }
+  if(dragMoveInfo && pointerDownInfo && lastPointerPos){
+    updateDragMovePositions(xToTick(lastPointerPos.x), yToNote(lastPointerPos.y));
+  }
+  drawAll();
+}
+document.getElementById('navHome').addEventListener('pointerdown', e=>{ e.preventDefault(); view.scrollX=0; refreshActiveDragAfterViewJump(); });
+document.getElementById('navPrev').addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  const m = tickToMeasure(view.scrollX);
+  view.scrollX = Math.max(0, measureStartTick(Math.max(1,m-1)));
+  refreshActiveDragAfterViewJump();
+});
+document.getElementById('navNext').addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  const m = tickToMeasure(view.scrollX);
+  view.scrollX = measureStartTick(m+1);
+  refreshActiveDragAfterViewJump();
+});
+document.getElementById('navEnd').addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  const tr = song.tracks[song.activeTrack];
+  if(!tr.notes.length) return;
+  const last = tr.notes.reduce((a,n)=>Math.max(a,n.startTick),0);
+  view.scrollX = Math.max(0, last - 200);
+  refreshActiveDragAfterViewJump();
+});
+
+/* ============================================================
+   TOP BAR: track grid + dialogs
+   ============================================================ */
+const trackGridEl = document.getElementById('trackGrid');
+for(let i=0;i<16;i++){ const d=document.createElement('div'); d.dataset.i=i; trackGridEl.appendChild(d); }
+function updateTrackGridUI(){
+  [...trackGridEl.children].forEach((d,i)=>d.classList.toggle('active', i===song.activeTrack));
+}
+let trackGridDragging=false, trackGridOutside=false, trackGridLastStepY=0, trackGridRect=null;
+const TRACK_GRID_DRAG_STEP = 24; // px of vertical drag per track step, measured from the moment it exits the button
+trackGridEl.addEventListener('pointerdown', e=>{
+  trackGridDragging=true; trackGridOutside=false; trackGridLastStepY=e.clientY;
+  trackGridRect = trackGridEl.getBoundingClientRect();
+  trackGridEl.setPointerCapture(e.pointerId);
+});
+trackGridEl.addEventListener('pointermove', e=>{
+  if(!trackGridDragging) return;
+  const inside = e.clientX>=trackGridRect.left && e.clientX<=trackGridRect.right &&
+                 e.clientY>=trackGridRect.top && e.clientY<=trackGridRect.bottom;
+  if(inside) return; // still just a tap-in-progress, however much it wobbles
+  if(!trackGridOutside){ trackGridOutside=true; trackGridLastStepY=e.clientY; } // baseline resets right as it exits
+  const dy = e.clientY - trackGridLastStepY;
+  if(dy <= -TRACK_GRID_DRAG_STEP){ // dragged up -> next track
+    song.activeTrack = Math.min(15, song.activeTrack+1);
+    trackGridLastStepY = e.clientY;
+    selection.clear(); drawAll();
+  } else if(dy >= TRACK_GRID_DRAG_STEP){ // dragged down -> previous track
+    song.activeTrack = Math.max(0, song.activeTrack-1);
+    trackGridLastStepY = e.clientY;
+    selection.clear(); drawAll();
+  }
+});
+function endTrackGridDrag(){
+  if(trackGridDragging && !trackGridOutside) openTrackDialog();
+  trackGridDragging=false;
+}
+trackGridEl.addEventListener('pointerup', endTrackGridDrag);
+trackGridEl.addEventListener('pointercancel', ()=>{ trackGridDragging=false; });
+
+function openOverlay(id){
+  const el = document.getElementById(id);
+  document.body.appendChild(el); // move to end so nested dialogs always paint above their parent
+  el.classList.remove('hidden');
+}
+function closeOverlay(id){ document.getElementById(id).classList.add('hidden'); }
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeOverlay(b.dataset.close));
+document.querySelectorAll('.overlay').forEach(ov=>{
+  if(ov.id==='exportProgressOverlay') return; // only dismissible via its own Cancel button
+  ov.addEventListener('click', e=>{
+    if(e.target===ov){
+      e.preventDefault();
+      e.stopPropagation();
+      ov.classList.add('hidden');
+    }
+  });
+});
+
+document.getElementById('menuBtn').onclick=()=>{
+  document.getElementById('projTitleLbl').textContent = song.name;
+  openOverlay('menuOverlay');
+};
+document.getElementById('menuProject').onclick=()=>{ closeOverlay('menuOverlay'); openOverlay('projectOverlay'); };
+document.getElementById('menuMixer').onclick=()=>{ closeOverlay('menuOverlay'); openMixer(); };
+document.getElementById('menuSettings').onclick=()=>{
+  closeOverlay('menuOverlay');
+  document.getElementById('settingsMaxFmTracks').value = song.limits.maxFmTracks || '';
+  document.getElementById('settingsMaxPoly').value = song.limits.maxPolyphonyPerTrack || '';
+  openOverlay('settingsOverlay');
+};
+document.getElementById('settingsOk').onclick=()=>{
+  const fmVal = +document.getElementById('settingsMaxFmTracks').value;
+  const polyVal = +document.getElementById('settingsMaxPoly').value;
+  song.limits.maxFmTracks = fmVal>0 ? fmVal : null;
+  song.limits.maxPolyphonyPerTrack = polyVal>0 ? polyVal : null;
+  closeOverlay('settingsOverlay');
+  invalidateVoiceStealCache();
+  drawGrid();
+};
+document.getElementById('menuAbout').onclick=()=>{ alert('MidSequer2+ (自作版)\nMilestone 1 build'); };
+
+document.getElementById('projNew').onclick=()=>{
+  if(confirm('現在のプロジェクトを破棄して新規作成しますか？')){
+    loadSongObject(newSong());
+  }
+};
+document.getElementById('projSaveAs').onclick=()=>{
+  const blob = new Blob([JSON.stringify(song,null,0)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=(song.name.replace(/[\[\]]/g,'')||'song')+'.mdsq.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  closeOverlay('projectOverlay');
+};
+document.getElementById('projOpen').onclick=()=>document.getElementById('fileInput').click();
+function loadSongObject(newSongObj){
+  song = newSongObj;
+  if(!song.tempoChanges || !song.tempoChanges.length) song.tempoChanges=[{tick:0,bpm:song.tempo}];
+  if(!song.limits) song.limits = { maxFmTracks: null, maxPolyphonyPerTrack: null };
+  if(!song.fmMemory) song.fmMemory = Array.from({length:16}, ()=>defaultFmPreset());
+  song.tracks.forEach(tr=>{ if(!tr.timbreEvents) tr.timbreEvents=[]; if(!tr.fmMemorySlot) tr.fmMemorySlot=1; });
+  resetMeasureCache(); invalidateTempoCache(); invalidateVoiceStealCache(); selection.clear(); clipboard=[]; undoStack=[]; redoStack=[];
+  syncTrackNodesFromSong();
+  closeOverlay('projectOverlay');
+  drawAll();
+}
+document.getElementById('fileInput').onchange=(e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{ loadSongObject(JSON.parse(reader.result)); }
+    catch(err){ alert('読み込みに失敗しました: '+err.message); }
+  };
+  reader.readAsText(f);
+  e.target.value='';
+};
+document.getElementById('projImportMidi').onclick=()=>document.getElementById('midiFileInput').click();
+document.getElementById('midiFileInput').onchange=async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const buf = await f.arrayBuffer();
+    const imported = parseMidiFile(buf);
+    if(imported.name==='[untitled]'){
+      imported.name = f.name.replace(/\.(mid|midi)$/i,'') || '[untitled]';
+    }
+    loadSongObject(imported);
+    showToast('MIDIファイルを読み込みました: '+f.name);
+  }catch(err){
+    console.error(err);
+    alert('MIDIファイルの読み込みに失敗しました: '+err.message);
+  }
+  e.target.value='';
+};
+
+/* ============================================================
+   AUDIO FILE EXPORT
+   WAV is always exact (we write the PCM ourselves). Other formats are
+   attempted via MediaRecorder using whatever the device's browser
+   actually supports; if the requested codec isn't available, we fall
+   back to what is, and say so, rather than pretending it worked.
+   ============================================================ */
+const EXPORT_FORMATS = ['wav','mp3','aac','m4a','flac'];
+let exportFormat = 'wav';
+document.getElementById('projExportAudio').onclick=()=>{
+  const row = document.getElementById('exportFormatRow');
+  row.innerHTML='';
+  EXPORT_FORMATS.forEach(fmt=>{
+    const b=document.createElement('button'); b.className='iconbtn fmtBtn'+(fmt===exportFormat?' selected':''); b.textContent=fmt.toUpperCase();
+    b.onclick=()=>{ exportFormat=fmt; [...row.children].forEach(c=>c.classList.remove('selected')); b.classList.add('selected'); };
+    row.appendChild(b);
+  });
+  closeOverlay('projectOverlay');
+  openOverlay('exportAudioOverlay');
+};
+
+function audioBufferToWavBlob(buffer){
+  const numCh = buffer.numberOfChannels, len = buffer.length, sr = buffer.sampleRate;
+  const bytesPerSample=2, blockAlign=numCh*bytesPerSample;
+  const dataSize = len*blockAlign;
+  const bufOut = new ArrayBuffer(44+dataSize);
+  const view = new DataView(bufOut);
+  const writeStr=(o,s)=>{ for(let i=0;i<s.length;i++) view.setUint8(o+i,s.charCodeAt(i)); };
+  writeStr(0,'RIFF'); view.setUint32(4,36+dataSize,true); writeStr(8,'WAVE');
+  writeStr(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
+  view.setUint16(22,numCh,true); view.setUint32(24,sr,true);
+  view.setUint32(28,sr*blockAlign,true); view.setUint16(32,blockAlign,true); view.setUint16(34,16,true);
+  writeStr(36,'data'); view.setUint32(40,dataSize,true);
+  const chans = []; for(let c=0;c<numCh;c++) chans.push(buffer.getChannelData(c));
+  let off=44;
+  for(let i=0;i<len;i++){
+    for(let c=0;c<numCh;c++){
+      const s = Math.max(-1, Math.min(1, chans[c][i]));
+      view.setInt16(off, s<0 ? s*0x8000 : s*0x7FFF, true);
+      off+=2;
+    }
+  }
+  return new Blob([bufOut], {type:'audio/wav'});
+}
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+function pickMimeTypeFor(format){
+  const map = {
+    aac: ['audio/mp4;codecs=mp4a.40.2','audio/aac','audio/mp4'],
+    m4a: ['audio/mp4;codecs=mp4a.40.2','audio/mp4'],
+    mp3: ['audio/mpeg'],
+    flac: ['audio/flac'],
+  };
+  const candidates = (map[format]||[]).concat(['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus']);
+  for(const c of candidates) if(window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c;
+  return null;
+}
+let exportCancelled = false;
+function setExportProgress(label, frac){
+  document.getElementById('exportProgressLabel').textContent = label;
+  const bar = document.getElementById('exportProgressBar');
+  if(frac===null){
+    bar.classList.add('indeterminate');
+  } else {
+    bar.classList.remove('indeterminate');
+    bar.style.width = Math.round(Math.max(0,Math.min(1,frac))*100)+'%';
+  }
+}
+document.getElementById('exportCancelBtn').onclick=(e)=>{
+  exportCancelled = true;
+  e.currentTarget.disabled = true;
+  e.currentTarget.textContent = 'キャンセル中...';
+  setExportProgress('キャンセルしています...', null);
+};
+
+async function encodeAndDownloadViaMediaRecorder(buffer, format, filenameBase){
+  const mime = pickMimeTypeFor(format);
+  if(!mime){ showToast(format.toUpperCase()+'はこの端末では書き出せません。WAVをお使いください'); return; }
+  const exportCtx = new (window.AudioContext||window.webkitAudioContext)();
+  const dest = exportCtx.createMediaStreamDestination();
+  const src = exportCtx.createBufferSource(); src.buffer=buffer; src.connect(dest);
+  const recorder = new MediaRecorder(dest.stream, {mimeType:mime});
+  const chunks=[];
+  recorder.ondataavailable = e=>{ if(e.data.size) chunks.push(e.data); };
+  const stopped = new Promise(res=>{ recorder.onstop=res; });
+  recorder.start();
+  src.start();
+  const startedAt = performance.now();
+  const totalMs = buffer.duration*1000;
+  let cancelledMidway = false;
+  await new Promise(res=>{
+    src.onended = res;
+    const poll = setInterval(()=>{
+      if(exportCancelled && !cancelledMidway){
+        cancelledMidway = true;
+        setExportProgress('キャンセルしています...', null);
+        clearInterval(poll);
+        try{ src.stop(); }catch(err){}
+        return;
+      }
+      const elapsed = performance.now()-startedAt;
+      setExportProgress('エンコード中… ('+format.toUpperCase()+')', elapsed/totalMs);
+      if(elapsed>=totalMs) clearInterval(poll);
+    }, 50);
+  });
+  recorder.stop();
+  await stopped;
+  exportCtx.close();
+  if(cancelledMidway){ showToast('書き出しをキャンセルしました'); return; }
+  const blob = new Blob(chunks, {type:mime});
+  const actualExt = mime.includes('mp4') ? 'm4a' : mime.includes('webm') ? 'webm' : mime.includes('ogg') ? 'ogg' : format;
+  downloadBlob(blob, filenameBase+'.'+actualExt);
+  if(actualExt===format) showToast('書き出し完了('+actualExt.toUpperCase()+')');
+  else showToast(format.toUpperCase()+'非対応のため'+actualExt.toUpperCase()+'で書き出しました');
+}
+document.getElementById('exportAudioGo').onclick=async ()=>{
+  const leadMeasures = Math.max(0, +document.getElementById('exportLeadMeasures').value||0);
+  const trailMeasures = Math.max(0, +document.getElementById('exportTrailMeasures').value||1);
+  closeOverlay('exportAudioOverlay');
+  ensureAudio();
+
+  exportCancelled = false;
+  const cancelBtn = document.getElementById('exportCancelBtn');
+  cancelBtn.disabled = false; cancelBtn.textContent = 'キャンセル';
+  setExportProgress('準備中...', 0);
+  openOverlay('exportProgressOverlay');
+
+  const contentEndTick = Math.max(0, ...song.tracks.flatMap(t=>t.notes.map(n=>n.startTick+n.lengthTick)), 0);
+  const leadTicks = leadMeasures*ticksPerMeasure(tsForMeasure(1));
+  const trailTs = tsForMeasure(tickToMeasure(contentEndTick));
+  const trailTicks = trailMeasures*ticksPerMeasure(trailTs);
+  const leadSeconds = leadTicks/PPQ*(60/tempoAtTick(0));
+  const contentSeconds = tickToSeconds(contentEndTick);
+  const trailSeconds = trailTicks/PPQ*(60/tempoAtTick(contentEndTick));
+  const totalSeconds = Math.max(0.5, leadSeconds+contentSeconds+trailSeconds);
+  const sampleRate = 44100;
+  const offlineCtx = new OfflineAudioContext(2, Math.ceil(totalSeconds*sampleRate), sampleRate);
+
+  // temporarily redirect the live synthesis engine at the offline context — no AnalyserNode here,
+  // since that was continuously running FFT analysis on all 16 tracks during export for no reason
+  // (it's only needed for the live waveform view), which was slowing rendering well below real-time.
+  const realActx=actx, realMaster=masterGain, realTrackNodes=trackNodes;
+  const savedWaveCache = periodicWaveCache; periodicWaveCache = {};
+  actx = offlineCtx;
+  masterGain = offlineCtx.createGain(); masterGain.gain.value=0.9; masterGain.connect(offlineCtx.destination);
+  buildTrackNodes(false);
+
+  song.tracks.forEach((tr,ti)=>{
+    tr.notes.forEach(nt=>{
+      const when = leadSeconds + tickToSeconds(nt.startTick);
+      const dur = Math.max(0.01, tickSpanSeconds(nt.startTick, effectiveNoteEndTick(ti, nt)));
+      triggerNote(ti, when, nt.pitch, 100, dur, false, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick);
+    });
+  });
+
+  // real progress via OfflineAudioContext's suspend/resume: schedule a pause every ~2.5% of the
+  // total render, report progress at each pause, then resume. This is the actual W3C-sanctioned
+  // way to observe offline-render progress (there's no separate progress event for it).
+  const STEPS = 40;
+  const stepSeconds = totalSeconds/STEPS;
+  for(let i=1;i<STEPS;i++){
+    const suspendAt = i*stepSeconds;
+    offlineCtx.suspend(suspendAt).then(()=>{
+      if(!exportCancelled) setExportProgress('音声を生成中...', suspendAt/totalSeconds);
+      offlineCtx.resume();
+    });
+  }
+
+  setExportProgress('音声を生成中...', 0);
+  let rendered;
+  try{
+    rendered = await offlineCtx.startRendering();
+  } finally {
+    // restore the live engine no matter what
+    actx = realActx; masterGain = realMaster; trackNodes = realTrackNodes;
+    periodicWaveCache = savedWaveCache;
+  }
+
+  if(exportCancelled){ closeOverlay('exportProgressOverlay'); showToast('書き出しをキャンセルしました'); return; }
+
+  const filenameBase = song.name.replace(/[\[\]]/g,'')||'song';
+  if(exportFormat==='wav'){
+    setExportProgress('WAVファイルを書き出し中...', 0.95);
+    downloadBlob(audioBufferToWavBlob(rendered), filenameBase+'.wav');
+    closeOverlay('exportProgressOverlay');
+    showToast('WAVファイルを書き出しました');
+  } else {
+    await encodeAndDownloadViaMediaRecorder(rendered, exportFormat, filenameBase);
+    closeOverlay('exportProgressOverlay');
+  }
+};
+document.getElementById('projRename').onclick=()=>{
+  document.getElementById('renameInput').value = song.name.replace(/[\[\]]/g,'');
+  closeOverlay('projectOverlay'); openOverlay('renameOverlay');
+};
+document.getElementById('renameOk').onclick=()=>{
+  const v = document.getElementById('renameInput').value.trim();
+  song.name = v ? v : '[untitled]';
+  closeOverlay('renameOverlay');
+};
+
+/* ---- Track dialog ---- */
+function openTrackDialog(){
+  const body = document.getElementById('trackListBody');
+  body.innerHTML='';
+  song.tracks.forEach((tr,i)=>{
+    const row = document.createElement('div');
+    row.className='listrow'+(i===song.activeTrack?' selected':'');
+    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : (tr.instrument===-1 ? '(drums)' : (String(tr.instrument).padStart(3,'0')+':'+GM_INSTRUMENTS[tr.instrument]));
+    const checked = otherTracksVisible.has(i) ? 'checked' : '';
+    row.innerHTML = `<div style="display:flex;align-items:center;"><input type="checkbox" class="visChk" ${checked} style="margin-right:10px;width:18px;height:18px;"><span class="dot"></span>${tr.name}</div><span class="sub">${instName}</span>`;
+    row.querySelector('.visChk').addEventListener('click', e=>{
+      e.stopPropagation();
+      if(e.target.checked) otherTracksVisible.add(i); else otherTracksVisible.delete(i);
+      drawGrid();
+    });
+    row.addEventListener('click', ()=>{ song.activeTrack=i; selection.clear(); closeOverlay('trackOverlay'); drawAll(); });
+    body.appendChild(row);
+  });
+  const toggleBtn = document.getElementById('trackVisToggleAll');
+  toggleBtn.textContent = otherTracksVisible.size>=16 ? '表示チェックを全解除' : '表示チェックを全選択';
+  toggleBtn.onclick = ()=>{
+    if(otherTracksVisible.size>=16) otherTracksVisible.clear();
+    else song.tracks.forEach((_,idx)=>otherTracksVisible.add(idx));
+    drawGrid();
+    openTrackDialog(); // refresh checkboxes + button label in place
+  };
+  openOverlay('trackOverlay');
+}
+
+/* ---- Instrument dialog ---- */
+let instCatFilter = -1; // -1 = All
+let instPendingTrack = null;
+let instActiveTab = 'preset';
+document.getElementById('instBtn').onclick=()=>openInstDialog(song.activeTrack);
+function openInstDialog(trackIdx){
+  instPendingTrack = trackIdx;
+  const tr = song.tracks[trackIdx];
+  switchInstTab(tr.instrumentType==='synth' ? 'synth' : 'preset');
+  const keys = document.getElementById('previewKeys');
+  keys.innerHTML='';
+  for(let o=1;o<=7;o++){
+    const b=document.createElement('button'); b.className='iconbtn'; b.style.flex='1'; b.textContent='C'+o;
+    b.addEventListener('pointerdown', ()=>startLivePreview(trackIdx, 12*(o+1)));
+    b.addEventListener('pointerup', stopLivePreview);
+    b.addEventListener('pointerleave', stopLivePreview);
+    b.addEventListener('pointercancel', stopLivePreview);
+    keys.appendChild(b);
+  }
+  openOverlay('instOverlay');
+}
+function switchInstTab(tab){
+  instActiveTab = tab;
+  document.getElementById('instTabPreset').classList.toggle('active', tab==='preset');
+  document.getElementById('instTabSynth').classList.toggle('active', tab==='synth');
+  document.getElementById('instTabSf2').classList.toggle('active', tab==='sf2');
+  document.getElementById('instPresetPane').style.display = tab==='preset' ? '' : 'none';
+  document.getElementById('instSynthPane').style.display = tab==='synth' ? '' : 'none';
+  document.getElementById('instSf2Pane').style.display = tab==='sf2' ? '' : 'none';
+  document.getElementById('instWaveBtn').style.display = tab==='synth' ? '' : 'none';
+  if(tab==='preset') renderInstList();
+  else if(tab==='synth') renderSynthPane();
+  else renderSf2Pane();
+}
+document.getElementById('instTabPreset').onclick=()=>switchInstTab('preset');
+document.getElementById('instTabSynth').onclick=()=>switchInstTab('synth');
+document.getElementById('instTabSf2').onclick=()=>switchInstTab('sf2');
+
+/* SF2 tab: UI skeleton only for now — lets the person browse to where multi-soundfont
+   support will live, without the load button actually doing anything yet. */
+let loadedCustomSf2Files = [];
+function renderSf2Pane(){
+  const body = document.getElementById('instSf2List');
+  body.innerHTML = loadedCustomSf2Files.length
+    ? ''
+    : '<div style="padding:16px;color:var(--text-dim);font-size:13px;">読み込まれたSF2はありません</div>';
+}
+document.getElementById('instSf2LoadBtn').onclick=()=>{
+  showToast('SF2読み込み機能は今後追加予定です');
+};
+
+function renderInstList(){
+  const body = document.getElementById('instListBody');
+  body.innerHTML='';
+  document.getElementById('instCatCurrent').textContent = instCatFilter===-1 ? '- All -' : GM_CATEGORIES[instCatFilter];
+  GM_INSTRUMENTS.forEach((name,idx)=>{
+    if(instCatFilter!==-1 && catOfInstrument(idx)!==instCatFilter) return;
+    const row=document.createElement('div'); row.className='listrow';
+    const tr = song.tracks[instPendingTrack];
+    if(tr.instrumentType==='preset' && tr.instrument===idx) row.classList.add('selected');
+    row.innerHTML = `<div style="display:flex;align-items:center;"><span class="dot"></span>${String(idx).padStart(3,'0')}:${name}</div>`;
+    row.onclick=()=>{ tr.instrument=idx; tr.instrumentType='preset'; renderInstList(); reschedulePlaybackNow(); };
+    body.appendChild(row);
+  });
+}
+function renderSynthPane(){
+  const body = document.getElementById('instSynthPane');
+  body.innerHTML='';
+  const tr = song.tracks[instPendingTrack];
+  const row = document.createElement('div'); row.className='listrow';
+  if(tr.instrumentType==='synth') row.classList.add('selected');
+  row.innerHTML = `<div style="display:flex;align-items:center;"><span class="dot"></span>Retro Synth</div>`;
+  row.onclick=()=>{ tr.instrumentType='synth'; delete periodicWaveCache[instPendingTrack]; renderSynthPane(); reschedulePlaybackNow(); };
+  body.appendChild(row);
+  const fmRow = document.createElement('div'); fmRow.className='listrow';
+  if(tr.instrumentType==='fm') fmRow.classList.add('selected');
+  fmRow.innerHTML = `<div style="display:flex;align-items:center;"><span class="dot"></span>FM Synth</div>`;
+  fmRow.onclick=()=>{
+    if(tr.instrumentType!=='fm'){
+      const limit = song.limits && song.limits.maxFmTracks;
+      if(limit){
+        const currentFmCount = song.tracks.filter((t,i)=>i!==instPendingTrack && t.instrumentType==='fm').length;
+        if(currentFmCount>=limit){ showToast('FM Synthを使えるトラック数の上限('+limit+')に達しています'); return; }
+      }
+    }
+    tr.instrumentType='fm';
+    renderSynthPane();
+    reschedulePlaybackNow();
+  };
+  body.appendChild(fmRow);
+}
+document.getElementById('instCatSwitch').onclick=()=>{
+  const body=document.getElementById('instCatBody'); body.innerHTML='';
+  const allRow=document.createElement('div'); allRow.className='listrow'; allRow.textContent='- All -';
+  allRow.onclick=()=>{ instCatFilter=-1; closeOverlay('instCatOverlay'); renderInstList(); };
+  body.appendChild(allRow);
+  GM_CATEGORIES.forEach((c,i)=>{
+    const row=document.createElement('div'); row.className='listrow'; row.textContent=c;
+    row.onclick=()=>{ instCatFilter=i; closeOverlay('instCatOverlay'); renderInstList(); };
+    body.appendChild(row);
+  });
+  openOverlay('instCatOverlay');
+};
+document.getElementById('instOk').onclick=()=>{ closeOverlay('instOverlay'); updateTrackGridUI(); };
+document.getElementById('instCustomBtn').onclick=()=>{
+  const tr = song.tracks[instPendingTrack];
+  if(tr.instrumentType==='fm') openFmEnvelopeDialog(instPendingTrack);
+  else showToast('ADSR設定は今後追加予定です');
+};
+document.getElementById('instWaveBtn').onclick=()=>{
+  const tr = song.tracks[instPendingTrack];
+  if(tr.instrumentType==='fm') openFmSynthDialog(instPendingTrack);
+  else openWaveformEditor(instPendingTrack);
+};
+
+/* ---- Retro Synth waveform editor ---- */
+
+let periodicWaveCache = {}; // trackIdx -> PeriodicWave, invalidated whenever the active waveform changes
+let waveformEditTrack = null;
+let waveformDragging = false, waveformLastIdx = null;
+let waveActiveTab = 'preset';
+let waveUndoStack = [], waveRedoStack = [];
+const waveformCanvas = document.getElementById('waveformCanvas');
+
+function getActiveWaveformSamples(tr){
+  if(tr.synthMode==='custom') return song.customWaveforms[(tr.synthCustomSlot||1)-1] || defaultRetroWaveform();
+  const preset = WAVE_PRESETS[tr.synthPresetIdx ?? 3];
+  return preset ? preset.gen() : defaultRetroWaveform();
+}
+
+function openWaveformEditor(trackIdx){
+  waveformEditTrack = trackIdx;
+  waveUndoStack=[]; waveRedoStack=[];
+  openOverlay('waveformEditorOverlay'); // must be visible/laid out BEFORE we measure the canvas below
+  switchWaveTab('preset');
+}
+function switchWaveTab(tab){
+  waveActiveTab = tab;
+  document.getElementById('waveTabPreset').classList.toggle('active', tab==='preset');
+  document.getElementById('waveTabCustom').classList.toggle('active', tab==='custom');
+  document.getElementById('wavePresetPane').style.display = tab==='preset' ? '' : 'none';
+  document.getElementById('waveCustomPane').style.display = tab==='custom' ? '' : 'none';
+  if(tab==='preset') renderWavePresetList();
+  else renderCustomWavePane();
+}
+document.getElementById('waveTabPreset').onclick=()=>switchWaveTab('preset');
+document.getElementById('waveTabCustom').onclick=()=>switchWaveTab('custom');
+
+function renderWavePresetList(){
+  const body = document.getElementById('wavePresetPane');
+  body.innerHTML='';
+  const tr = song.tracks[waveformEditTrack];
+  WAVE_PRESETS.forEach((p,idx)=>{
+    const row=document.createElement('div'); row.className='listrow';
+    if(tr.synthMode==='preset' && tr.synthPresetIdx===idx) row.classList.add('selected');
+    row.innerHTML=`<div style="display:flex;align-items:center;"><span class="dot"></span>${p.name}</div>`;
+    row.onclick=()=>{
+      tr.instrumentType='synth'; tr.synthMode='preset'; tr.synthPresetIdx=idx;
+      delete periodicWaveCache[waveformEditTrack];
+      renderWavePresetList();
+      reschedulePlaybackNow();
+    };
+    body.appendChild(row);
+  });
+}
+
+function renderCustomWavePane(){
+  const tr = song.tracks[waveformEditTrack];
+  const useRow = document.getElementById('waveUseCustomRow');
+  useRow.classList.toggle('selected', tr.synthMode==='custom');
+  useRow.onclick=()=>{
+    tr.instrumentType='synth'; tr.synthMode='custom';
+    delete periodicWaveCache[waveformEditTrack];
+    renderCustomWavePane();
+    reschedulePlaybackNow();
+  };
+  const slotRow = document.getElementById('waveSlotRow');
+  slotRow.innerHTML='';
+  for(let s=1;s<=4;s++){
+    const b=document.createElement('button'); b.className='slotBtn'+(tr.synthCustomSlot===s?' selected':'');
+    b.textContent='波形メモリ'+s;
+    b.onclick=()=>{
+      tr.instrumentType='synth'; tr.synthMode='custom'; tr.synthCustomSlot=s;
+      waveUndoStack=[]; waveRedoStack=[];
+      delete periodicWaveCache[waveformEditTrack];
+      renderCustomWavePane();
+      reschedulePlaybackNow();
+    };
+    slotRow.appendChild(b);
+  }
+  sizeWaveformCanvas();
+  drawWaveformEditor();
+  const keys = document.getElementById('waveformPreviewKeys');
+  keys.innerHTML='';
+  for(let o=1;o<=7;o++){
+    const b=document.createElement('button'); b.className='iconbtn'; b.style.flex='1'; b.textContent='C'+o;
+    b.addEventListener('pointerdown', ()=>startLivePreview(waveformEditTrack, 12*(o+1)));
+    b.addEventListener('pointerup', stopLivePreview);
+    b.addEventListener('pointerleave', stopLivePreview);
+    b.addEventListener('pointercancel', stopLivePreview);
+    keys.appendChild(b);
+  }
+}
+
+function sizeWaveformCanvas(){
+  const dpr = window.devicePixelRatio||1;
+  const rect = waveformCanvas.getBoundingClientRect(); // dialog is already visible here, so this is accurate
+  const w = rect.width||440, h = rect.height||150;
+  waveformCanvas.width = Math.round(w*dpr); waveformCanvas.height = Math.round(h*dpr);
+  waveformCanvas.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+}
+function drawWaveformEditor(){
+  const ctx = waveformCanvas.getContext('2d');
+  const dpr = window.devicePixelRatio||1;
+  const w = waveformCanvas.width/dpr, h = waveformCanvas.height/dpr;
+  ctx.clearRect(0,0,w,h);
+  const tr = song.tracks[waveformEditTrack];
+  const samples = song.customWaveforms[(tr.synthCustomSlot||1)-1] || defaultRetroWaveform();
+  const barW = w/WAVE_BARS;
+  ctx.strokeStyle='rgba(255,255,255,.15)'; ctx.beginPath(); ctx.moveTo(0,h/2); ctx.lineTo(w,h/2); ctx.stroke();
+  ctx.fillStyle='#5ec8b8';
+  samples.forEach((v,i)=>{
+    const barH = Math.abs(v)*(h/2);
+    const x = i*barW;
+    const y = v>=0 ? h/2-barH : h/2;
+    ctx.fillRect(x+1, y, Math.max(1,barW-2), barH);
+  });
+}
+function waveformLocalPos(e){
+  const r = waveformCanvas.getBoundingClientRect(); // same live rect used for both drawing and hit-testing, so they always agree
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+function currentEditSlotArr(){
+  const tr = song.tracks[waveformEditTrack];
+  const i = (tr.synthCustomSlot||1)-1;
+  if(!song.customWaveforms[i]) song.customWaveforms[i] = defaultRetroWaveform();
+  return song.customWaveforms[i];
+}
+function setWaveformBarAt(x,y,w,h){
+  const arr = currentEditSlotArr();
+  const idx = Math.max(0, Math.min(WAVE_BARS-1, Math.floor(x/(w/WAVE_BARS))));
+  const val = quantizeWaveVal((h/2-y)/(h/2));
+  if(waveformLastIdx!==null && Math.abs(idx-waveformLastIdx)>1){
+    // interpolate across skipped bars for a smooth drag, then re-quantize each one
+    const prevVal = arr[waveformLastIdx];
+    const step = idx>waveformLastIdx?1:-1;
+    for(let i=waveformLastIdx; i!==idx; i+=step){
+      const f = Math.abs(i-waveformLastIdx)/Math.abs(idx-waveformLastIdx);
+      arr[i] = quantizeWaveVal(prevVal + (val-prevVal)*f);
+    }
+  }
+  arr[idx] = val;
+  waveformLastIdx = idx;
+  delete periodicWaveCache[waveformEditTrack];
+}
+waveformCanvas.addEventListener('pointerdown', e=>{
+  waveformCanvas.setPointerCapture(e.pointerId);
+  waveformDragging=true; waveformLastIdx=null;
+  waveUndoStack.push(JSON.stringify(currentEditSlotArr()));
+  if(waveUndoStack.length>40) waveUndoStack.shift();
+  waveRedoStack=[];
+  const p=waveformLocalPos(e); const dpr=window.devicePixelRatio||1;
+  setWaveformBarAt(p.x,p.y, waveformCanvas.width/dpr, waveformCanvas.height/dpr);
+  drawWaveformEditor();
+});
+waveformCanvas.addEventListener('pointermove', e=>{
+  if(!waveformDragging) return;
+  const p=waveformLocalPos(e); const dpr=window.devicePixelRatio||1;
+  setWaveformBarAt(p.x,p.y, waveformCanvas.width/dpr, waveformCanvas.height/dpr);
+  drawWaveformEditor();
+});
+function endWaveformDrag(){ waveformDragging=false; waveformLastIdx=null; reschedulePlaybackNow(); }
+waveformCanvas.addEventListener('pointerup', endWaveformDrag);
+waveformCanvas.addEventListener('pointercancel', endWaveformDrag);
+document.getElementById('waveformUndo').onclick=()=>{
+  if(!waveUndoStack.length) return;
+  const tr = song.tracks[waveformEditTrack];
+  const i = (tr.synthCustomSlot||1)-1;
+  waveRedoStack.push(JSON.stringify(song.customWaveforms[i]));
+  song.customWaveforms[i] = JSON.parse(waveUndoStack.pop());
+  delete periodicWaveCache[waveformEditTrack];
+  drawWaveformEditor(); reschedulePlaybackNow();
+};
+document.getElementById('waveformRedo').onclick=()=>{
+  if(!waveRedoStack.length) return;
+  const tr = song.tracks[waveformEditTrack];
+  const i = (tr.synthCustomSlot||1)-1;
+  waveUndoStack.push(JSON.stringify(song.customWaveforms[i]));
+  song.customWaveforms[i] = JSON.parse(waveRedoStack.pop());
+  delete periodicWaveCache[waveformEditTrack];
+  drawWaveformEditor(); reschedulePlaybackNow();
+};
+document.getElementById('waveformReset').onclick=()=>{
+  if(waveActiveTab!=='custom') return;
+  const tr = song.tracks[waveformEditTrack];
+  const i = (tr.synthCustomSlot||1)-1;
+  waveUndoStack.push(JSON.stringify(song.customWaveforms[i]));
+  waveRedoStack=[];
+  song.customWaveforms[i] = defaultRetroWaveform();
+  delete periodicWaveCache[waveformEditTrack];
+  drawWaveformEditor();
+  reschedulePlaybackNow();
+};
+
+/* ============================================================
+   FM SYNTH DIALOG
+   ============================================================ */
+let fmEditTrack = null;
+let fmActiveTab = 'algo';
+let fmSelectedOp = 0;
+function currentFmPreset(){
+  const tr = song.tracks[fmEditTrack];
+  const i = (tr.fmMemorySlot||1)-1;
+  if(!song.fmMemory[i]) song.fmMemory[i] = defaultFmPreset();
+  return song.fmMemory[i];
+}
+function openFmSynthDialog(trackIdx){
+  fmEditTrack = trackIdx;
+  openOverlay('fmSynthOverlay');
+  switchFmTab('algo');
+}
+function switchFmTab(tab){
+  fmActiveTab = tab;
+  document.getElementById('fmTabAlgo').classList.toggle('active', tab==='algo');
+  document.getElementById('fmTabOp').classList.toggle('active', tab==='op');
+  document.getElementById('fmAlgoPane').style.display = tab==='algo' ? '' : 'none';
+  document.getElementById('fmOpPane').style.display = tab==='op' ? '' : 'none';
+  if(tab==='algo') renderFmAlgoList(); else renderFmOpTabs();
+}
+document.getElementById('fmTabAlgo').onclick=()=>switchFmTab('algo');
+document.getElementById('fmTabOp').onclick=()=>switchFmTab('op');
+
+function renderFmAlgoList(){
+  const preset = currentFmPreset();
+  const body = document.getElementById('fmAlgoList');
+  body.innerHTML='';
+  FM_ALGORITHMS.forEach((algo,idx)=>{
+    const card = document.createElement('div');
+    card.className='fmAlgoCard'+(preset.algorithm===idx?' selected':'');
+    card.textContent = (idx+1)+'\n'+algo.name;
+    card.style.whiteSpace='pre-line';
+    card.onclick=()=>{ preset.algorithm=idx; renderFmAlgoList(); drawFmAlgoDiagram(); reschedulePlaybackNow(); };
+    body.appendChild(card);
+  });
+  drawFmAlgoDiagram();
+}
+function fmDiagramPositions(w, h, layout){
+  const maxCol = Math.max(...layout.pos.map(p=>p.c));
+  const maxRow = Math.max(...layout.pos.map(p=>p.r));
+  const marginX = 30, marginY = 26;
+  const colSpacing = maxCol>0 ? (w-2*marginX)/maxCol : 0;
+  const rowSpacing = maxRow>0 ? (h-2*marginY)/maxRow : 0;
+  return layout.pos.map(p=>({
+    x: maxCol>0 ? marginX + p.c*colSpacing : w/2,
+    y: (h-marginY) - p.r*rowSpacing, // row 0 = bottom (carrier row), matches DX7-chart convention
+  }));
+}
+function drawFmAlgoDiagram(){
+  const preset = currentFmPreset();
+  const algo = FM_ALGORITHMS[preset.algorithm||0];
+  const canvas = document.getElementById('fmAlgoDiagram');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width||300, h = rect.height||140;
+  canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const positions = fmDiagramPositions(w,h,algo.layout);
+  const SIZE=15;
+  ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1.5;
+  algo.mods.forEach(([m,d])=>{
+    const a=positions[m], b=positions[d];
+    const ax=a.x, ay=a.y+SIZE, bx=b.x, by=b.y-SIZE;
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+    const ang=Math.atan2(by-ay,bx-ax);
+    ctx.beginPath();
+    ctx.moveTo(bx-10*Math.cos(ang-0.4), by-10*Math.sin(ang-0.4));
+    ctx.lineTo(bx, by);
+    ctx.lineTo(bx-10*Math.cos(ang+0.4), by-10*Math.sin(ang+0.4));
+    ctx.stroke();
+  });
+  const ops = preset.operators;
+  positions.forEach((p,i)=>{
+    const isCarrier = algo.carriers.includes(i);
+    ctx.fillStyle = isCarrier ? '#5ec8b8' : '#e2a24f';
+    ctx.fillRect(p.x-SIZE, p.y-SIZE, SIZE*2, SIZE*2);
+    ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.strokeRect(p.x-SIZE,p.y-SIZE,SIZE*2,SIZE*2);
+    ctx.fillStyle='#0a0a0a'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(String(i+1), p.x, p.y);
+    if(ops[i] && ops[i].feedback){
+      ctx.strokeStyle='#ffcf8a'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(p.x+SIZE-2,p.y-SIZE-6,7,0,Math.PI*1.6); ctx.stroke();
+    }
+  });
+  // carrier output line down to the mix bus, like the classic DX7 chart
+  ctx.strokeStyle='rgba(255,255,255,.4)';
+  algo.carriers.forEach(ci=>{
+    const p=positions[ci];
+    ctx.beginPath(); ctx.moveTo(p.x,p.y+SIZE); ctx.lineTo(p.x,h-4); ctx.stroke();
+  });
+}
+document.getElementById('fmAlgoDiagram').addEventListener('pointerdown', e=>{
+  const preset = currentFmPreset();
+  const algo = FM_ALGORITHMS[preset.algorithm||0];
+  const r = e.currentTarget.getBoundingClientRect();
+  const x=e.clientX-r.left, y=e.clientY-r.top;
+  const positions = fmDiagramPositions(r.width, r.height, algo.layout);
+  const SIZE=15;
+  for(let i=0;i<6;i++){
+    if(Math.abs(x-positions[i].x)<=SIZE && Math.abs(y-positions[i].y)<=SIZE){
+      preset.operators[i].feedback = !preset.operators[i].feedback;
+      drawFmAlgoDiagram();
+      reschedulePlaybackNow();
+      return;
+    }
+  }
+});
+
+function renderFmOpTabs(){
+  const tabs = document.getElementById('fmOpTabs');
+  tabs.innerHTML='';
+  for(let i=0;i<6;i++){
+    const b=document.createElement('button'); b.className='fmOpTabBtn'+(i===fmSelectedOp?' active':'');
+    b.textContent='OP'+(i+1);
+    b.onclick=()=>{ fmSelectedOp=i; renderFmOpTabs(); updateFmOpSliders(); };
+    tabs.appendChild(b);
+  }
+  updateFmOpSliders();
+}
+function updateFmOpSliders(){
+  const preset = currentFmPreset();
+  const op = preset.operators[fmSelectedOp];
+  document.getElementById('fmOpRatioSlider').value = op.ratio;
+  document.getElementById('fmOpRatioVal').value = op.ratio.toFixed(2);
+  document.getElementById('fmOpPhaseSlider').value = op.phase;
+  document.getElementById('fmOpPhaseVal').value = op.phase.toFixed(2);
+  document.getElementById('fmOpLevelSlider').value = op.level;
+  document.getElementById('fmOpLevelVal').value = op.level.toFixed(2);
+  scheduleFmPreviewRender();
+}
+function fmOpSliderChanged(){
+  const preset = currentFmPreset();
+  const op = preset.operators[fmSelectedOp];
+  op.ratio = +document.getElementById('fmOpRatioSlider').value;
+  op.phase = +document.getElementById('fmOpPhaseSlider').value;
+  op.level = +document.getElementById('fmOpLevelSlider').value;
+  document.getElementById('fmOpRatioVal').value = op.ratio.toFixed(2);
+  document.getElementById('fmOpPhaseVal').value = op.phase.toFixed(2);
+  document.getElementById('fmOpLevelVal').value = op.level.toFixed(2);
+  scheduleFmPreviewRender();
+  reschedulePlaybackNow();
+}
+document.getElementById('fmOpRatioSlider').oninput=fmOpSliderChanged;
+document.getElementById('fmOpPhaseSlider').oninput=fmOpSliderChanged;
+document.getElementById('fmOpLevelSlider').oninput=fmOpSliderChanged;
+function fmOpNumberChanged(){
+  const preset = currentFmPreset();
+  const op = preset.operators[fmSelectedOp];
+  const ratio = +document.getElementById('fmOpRatioVal').value;
+  const phase = +document.getElementById('fmOpPhaseVal').value;
+  const level = +document.getElementById('fmOpLevelVal').value;
+  if(!isNaN(ratio)){ op.ratio=ratio; document.getElementById('fmOpRatioSlider').value=Math.max(0.5,Math.min(16,ratio)); }
+  if(!isNaN(phase)){ op.phase=phase; document.getElementById('fmOpPhaseSlider').value=Math.max(0,Math.min(6.283,phase)); }
+  if(!isNaN(level)){ op.level=level; document.getElementById('fmOpLevelSlider').value=Math.max(0,Math.min(2,level)); }
+  scheduleFmPreviewRender();
+  reschedulePlaybackNow();
+}
+document.getElementById('fmOpRatioVal').oninput=fmOpNumberChanged;
+document.getElementById('fmOpPhaseVal').oninput=fmOpNumberChanged;
+document.getElementById('fmOpLevelVal').oninput=fmOpNumberChanged;
+
+let fmPreviewDebounce=null;
+function scheduleFmPreviewRender(){
+  clearTimeout(fmPreviewDebounce);
+  fmPreviewDebounce = setTimeout(renderFmOpPreview, 90);
+}
+async function renderFmOpPreview(){
+  const preset = currentFmPreset();
+  const canvas = document.getElementById('fmOpWaveCanvas');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width||300, h = rect.height||80;
+  canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  try{
+    const sr=44100, dur=0.08, refFreq=220;
+    const offCtx = new OfflineAudioContext(1, Math.ceil(dur*sr), sr);
+    buildFmGraph(offCtx, offCtx.destination, 0, refFreq, preset, dur, 100);
+    const buf = await offCtx.startRendering();
+    const data = buf.getChannelData(0);
+    // center on a rising zero-crossing, show ~2 cycles at the reference pitch
+    const cyclesSamples = Math.round(sr/refFreq*2.2);
+    let triggerIdx = Math.floor(data.length*0.3);
+    for(let i=Math.floor(data.length*0.2); i<data.length-cyclesSamples; i++){
+      if(data[i-1]<0 && data[i]>=0){ triggerIdx=i; break; }
+    }
+    ctx.strokeStyle='#5ec8b8'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for(let i=0;i<cyclesSamples;i++){
+      const s = data[triggerIdx+i] ?? 0;
+      const x = (i/cyclesSamples)*w;
+      const y = h/2 - s*(h/2)*0.9;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }catch(err){ console.warn('FM preview render failed', err); }
+}
+
+document.getElementById('fmMemorySlotBtn').onclick=()=>{
+  const body = document.getElementById('fmMemoryList');
+  body.innerHTML='';
+  const tr = song.tracks[fmEditTrack];
+  for(let s=1;s<=16;s++){
+    const row=document.createElement('div'); row.className='listrow'+(tr.fmMemorySlot===s?' selected':'');
+    row.innerHTML=`<div style="display:flex;align-items:center;"><span class="dot"></span>波形メモリ${s}</div>`;
+    row.onclick=()=>{
+      tr.fmMemorySlot=s;
+      closeOverlay('fmMemoryOverlay');
+      renderFmAlgoList(); renderFmOpTabs();
+      reschedulePlaybackNow();
+    };
+    body.appendChild(row);
+  }
+  openOverlay('fmMemoryOverlay');
+};
+
+/* ---- ADSR envelope dialog ---- */
+function openFmEnvelopeDialog(trackIdx){
+  fmEditTrack = trackIdx;
+  const env = currentFmPreset().envelope;
+  document.getElementById('fmAttackSlider').value = env.attack;
+  document.getElementById('fmAttackVal').textContent = env.attack.toFixed(2);
+  document.getElementById('fmDecaySlider').value = env.decay;
+  document.getElementById('fmDecayVal').textContent = env.decay.toFixed(2);
+  document.getElementById('fmSustainSlider').value = env.sustain;
+  document.getElementById('fmSustainVal').textContent = env.sustain.toFixed(2);
+  document.getElementById('fmReleaseSlider').value = env.release;
+  document.getElementById('fmReleaseVal').textContent = env.release.toFixed(2);
+  openOverlay('fmEnvelopeOverlay');
+}
+function fmEnvSliderChanged(){
+  const env = currentFmPreset().envelope;
+  env.attack = +document.getElementById('fmAttackSlider').value;
+  env.decay = +document.getElementById('fmDecaySlider').value;
+  env.sustain = +document.getElementById('fmSustainSlider').value;
+  env.release = +document.getElementById('fmReleaseSlider').value;
+  document.getElementById('fmAttackVal').textContent = env.attack.toFixed(2);
+  document.getElementById('fmDecayVal').textContent = env.decay.toFixed(2);
+  document.getElementById('fmSustainVal').textContent = env.sustain.toFixed(2);
+  document.getElementById('fmReleaseVal').textContent = env.release.toFixed(2);
+  reschedulePlaybackNow();
+}
+document.getElementById('fmAttackSlider').oninput=fmEnvSliderChanged;
+document.getElementById('fmDecaySlider').oninput=fmEnvSliderChanged;
+document.getElementById('fmSustainSlider').oninput=fmEnvSliderChanged;
+document.getElementById('fmReleaseSlider').oninput=fmEnvSliderChanged;
+
+/* ---- track-level timbre switch events ("from measure X, use memory slot Y") ---- */
+document.getElementById('fmTimbreEventsBtn').onclick=()=>{
+  renderTimbreEventsList();
+  openOverlay('timbreEventsOverlay');
+};
+function renderTimbreEventsList(){
+  const tr = song.tracks[fmEditTrack];
+  const body = document.getElementById('timbreEventsList');
+  body.innerHTML='';
+  if(!tr.timbreEvents.length){
+    body.innerHTML = '<div style="padding:14px 16px;color:var(--text-dim);font-size:13px;">まだイベントがありません</div>';
+  }
+  [...tr.timbreEvents].sort((a,b)=>a.measure-b.measure).forEach(ev=>{
+    const row = document.createElement('div'); row.className='listrow';
+    row.innerHTML = `<span>小節${ev.measure} → 波形メモリ${ev.slot}</span><span style="color:var(--danger);">✕</span>`;
+    row.onclick=()=>{
+      tr.timbreEvents = tr.timbreEvents.filter(e=>e!==ev);
+      renderTimbreEventsList();
+      reschedulePlaybackNow();
+    };
+    body.appendChild(row);
+  });
+}
+document.getElementById('timbreEventAdd').onclick=()=>{
+  const tr = song.tracks[fmEditTrack];
+  const measure = Math.max(1, +document.getElementById('timbreEventMeasure').value||1);
+  const slot = Math.max(1, Math.min(16, +document.getElementById('timbreEventSlot').value||1));
+  tr.timbreEvents = tr.timbreEvents.filter(e=>e.measure!==measure);
+  tr.timbreEvents.push({measure, slot});
+  renderTimbreEventsList();
+  reschedulePlaybackNow();
+};
+
+
+
+/* ---- Song settings dialog ---- */
+document.getElementById('songSettingsBtn').onclick=()=>{
+  document.getElementById('tempoSlider').value = song.tempo;
+  document.getElementById('tempoVal').value = song.tempo;
+  const cur = song.timeSigChanges[song.timeSigChanges.length-1];
+  document.getElementById('tsNumVal').value = cur.num;
+  document.getElementById('tsDenVal').value = cur.den;
+  document.getElementById('tsMeasureVal').value = cur.measure;
+  openOverlay('songSettingsOverlay');
+};
+document.getElementById('tempoSlider').oninput=(e)=>{
+  document.getElementById('tempoVal').value = e.target.value;
+};
+document.getElementById('tempoVal').oninput=(e)=>{
+  const v = +e.target.value;
+  if(!isNaN(v)) document.getElementById('tempoSlider').value = Math.max(1,Math.min(270,v));
+};
+let tapTempoTimes=[];
+document.getElementById('tapTempoBtn').onclick=()=>{
+  const now = performance.now();
+  if(tapTempoTimes.length && now-tapTempoTimes[tapTempoTimes.length-1] > 2000) tapTempoTimes=[]; // reset after a pause
+  tapTempoTimes.push(now);
+  if(tapTempoTimes.length>8) tapTempoTimes.shift();
+  if(tapTempoTimes.length>=2){
+    const intervals=[];
+    for(let i=1;i<tapTempoTimes.length;i++) intervals.push(tapTempoTimes[i]-tapTempoTimes[i-1]);
+    const avgMs = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+    const bpm = Math.max(1, Math.min(999, Math.round(60000/avgMs)));
+    document.getElementById('tempoVal').value = bpm;
+    document.getElementById('tempoSlider').value = Math.max(1,Math.min(270,bpm));
+  }
+};
+document.getElementById('tsNumMinus').onclick=()=>{ const el=document.getElementById('tsNumVal'); el.value=Math.max(1,(+el.value||1)-1); };
+document.getElementById('tsNumPlus').onclick=()=>{ const el=document.getElementById('tsNumVal'); el.value=Math.min(999,(+el.value||1)+1); };
+document.getElementById('tsDenMinus').onclick=()=>{ const el=document.getElementById('tsDenVal'); el.value=Math.max(1,(+el.value||1)-1); };
+document.getElementById('tsDenPlus').onclick=()=>{ const el=document.getElementById('tsDenVal'); el.value=Math.min(999,(+el.value||1)+1); };
+document.getElementById('songSettingsOk').onclick=()=>{
+  song.tempo = Math.max(1, +document.getElementById('tempoVal').value||120); // numeric field: no upper limit
+  song.tempoChanges = [{tick:0, bpm:song.tempo}]; // manual tempo entry always collapses to a single constant tempo
+  invalidateTempoCache();
+  const num = Math.max(1, +document.getElementById('tsNumVal').value||4);
+  const den = Math.max(1, +document.getElementById('tsDenVal').value||4);
+  const measure = Math.max(1, +document.getElementById('tsMeasureVal').value||1);
+  const others = song.timeSigChanges.filter(c=>c.measure!==measure);
+  others.push({measure,num,den});
+  others.sort((a,b)=>a.measure-b.measure);
+  song.timeSigChanges = others;
+  resetMeasureCache();
+  closeOverlay('songSettingsOverlay');
+  reschedulePlaybackNow();
+  drawAll();
+};
+function updateTimesigLabel(){
+  const refTick = playing ? playheadTick : view.scrollX;
+  const cur = tsForMeasure(tickToMeasure(refTick));
+  document.getElementById('timesigLabel').textContent = cur.num+'/'+cur.den;
+  document.getElementById('tempoLabel').textContent = '♩ = '+Math.round(tempoAtTick(refTick));
+}
+
+/* ---- Grid division dialog ---- */
+document.getElementById('gridDivBtn').onclick=()=>{
+  const body=document.getElementById('gridDivBody'); body.innerHTML='';
+  GRID_DIVISIONS.forEach(g=>{
+    const row=document.createElement('div'); row.className='listrow'+(song.gridDiv===g.id?' selected':'');
+    row.innerHTML=`<div style="display:flex;align-items:center;"><span class="dot"></span>${g.label}</div>`;
+    row.onclick=()=>{ song.gridDiv=g.id; closeOverlay('gridDivOverlay'); drawGrid(); };
+    body.appendChild(row);
+  });
+  openOverlay('gridDivOverlay');
+};
+
+/* ---- Mixer ---- */
+function openMixer(){
+  ensureAudio();
+  const body = document.getElementById('mixerBody'); body.innerHTML='';
+  song.tracks.forEach((tr,i)=>{
+    const row = document.createElement('div'); row.className='mixch';
+    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : (tr.instrument===-1 ? '(drums)' : GM_INSTRUMENTS[tr.instrument]);
+    row.innerHTML = `
+      <div class="bar ${i===song.activeTrack?'active':''}"></div>
+      <div class="name">${i+1}</div>
+      <div class="msBtns">
+        <button class="msBtn muteBtn ${tr.muted?'mute-on':''}">M</button>
+        <button class="msBtn soloBtn ${tr.solo?'solo-on':''}">S</button>
+      </div>
+      <div class="col">
+        <input type="range" min="0" max="127" value="${tr.volume}" class="volSlider">
+        <div class="inst">${instName} &nbsp;|&nbsp; Pan <input type="range" min="-100" max="100" value="${tr.pan}" class="panSlider" style="width:70px;vertical-align:middle;"></div>
+      </div>
+      <input type="number" class="valnum" min="0" max="127" inputmode="numeric" value="${tr.volume}">`;
+    const volEl = row.querySelector('.volSlider');
+    const valEl = row.querySelector('.valnum');
+    volEl.oninput=()=>{
+      tr.volume=+volEl.value; valEl.value=tr.volume;
+      if(trackNodes[i]) trackNodes[i].gain.gain.value = effectiveTrackGain(tr);
+    };
+    valEl.oninput=()=>{
+      let v=+valEl.value; if(isNaN(v)) return;
+      v=Math.max(0,Math.min(127,v));
+      tr.volume=v; volEl.value=v;
+      if(trackNodes[i]) trackNodes[i].gain.gain.value = effectiveTrackGain(tr);
+    };
+    row.querySelector('.panSlider').oninput=(e)=>{
+      tr.pan=+e.target.value;
+      if(trackNodes[i]) trackNodes[i].pan.pan.value = tr.pan/100;
+    };
+    row.querySelector('.muteBtn').onclick=()=>{ tr.muted=!tr.muted; updateTrackAudibility(); openMixer(); };
+    row.querySelector('.soloBtn').onclick=()=>{ tr.solo=!tr.solo; updateTrackAudibility(); openMixer(); };
+    row.querySelector('.name').onclick=()=>{ song.activeTrack=i; selection.clear(); closeOverlay('mixerOverlay'); drawAll(); };
+    body.appendChild(row);
+  });
+  openOverlay('mixerOverlay');
+}
+
+/* ============================================================
+   SF2 SOUNDFONT PARSER (minimal but functional: presets/instruments/
+   samples, key/vel zones, global-zone defaults, core generators for
+   pitch/pan/volume-envelope/loop — modulators & filters are not
+   implemented, which is fine for straightforward GM playback)
+   ============================================================ */
+function readCString(view, offset, len){
+  let s='';
+  for(let i=0;i<len;i++){ const c=view.getUint8(offset+i); if(c===0) break; s+=String.fromCharCode(c); }
+  return s;
+}
+class SF2 {
+  constructor(buf){
+    this.view = new DataView(buf);
+    this.buf = buf;
+    this.sampleData = null;
+    this._parse();
+  }
+  _fourcc(o){ const v=this.view; return String.fromCharCode(v.getUint8(o),v.getUint8(o+1),v.getUint8(o+2),v.getUint8(o+3)); }
+  _parse(){
+    const view=this.view;
+    if(this._fourcc(0)!=='RIFF') throw new Error('not an SF2/RIFF file');
+    let pos=12;
+    const top={};
+    while(pos < view.byteLength-8){
+      const id=this._fourcc(pos); const size=view.getUint32(pos+4,true); const bodyStart=pos+8;
+      if(id==='LIST'){ const lt=this._fourcc(bodyStart); top[lt]={start:bodyStart+4,end:bodyStart+size}; }
+      pos = bodyStart + size + (size%2);
+    }
+    if(top.sdta){
+      let p=top.sdta.start;
+      while(p<top.sdta.end){
+        const id=this._fourcc(p); const size=view.getUint32(p+4,true);
+        if(id==='smpl'){ this.sampleData = new Int16Array(this.buf, p+8, size/2); }
+        p += 8+size+(size%2);
+      }
+    }
+    const pd={};
+    if(top.pdta){
+      let p=top.pdta.start;
+      while(p<top.pdta.end){
+        const id=this._fourcc(p); const size=view.getUint32(p+4,true);
+        pd[id]={start:p+8,size}; p += 8+size+(size%2);
+      }
+    }
+    const phdr=this._readPhdr(pd.phdr), pbag=this._readBag(pd.pbag), pgen=this._readGen(pd.pgen);
+    const inst=this._readInst(pd.inst), ibag=this._readBag(pd.ibag), igen=this._readGen(pd.igen);
+    this.samples=this._readShdr(pd.shdr);
+
+    this.instruments = inst.slice(0,-1).map((ins,i)=>{
+      const zones=[];
+      for(let b=ins.bagNdx;b<inst[i+1].bagNdx;b++){
+        const gens={};
+        for(let g=ibag[b].genNdx; g<ibag[b+1].genNdx; g++) gens[igen[g].op]=igen[g].amount;
+        zones.push(gens);
+      }
+      return {name:ins.name, zones};
+    });
+    this.presets = phdr.slice(0,-1).map((ph,i)=>{
+      const zones=[];
+      for(let b=ph.bagNdx;b<phdr[i+1].bagNdx;b++){
+        const gens={};
+        for(let g=pbag[b].genNdx; g<pbag[b+1].genNdx; g++) gens[pgen[g].op]=pgen[g].amount;
+        zones.push(gens);
+      }
+      return {name:ph.name, preset:ph.preset, bank:ph.bank, zones};
+    });
+  }
+  _readPhdr(c){ const v=this.view,n=c.size/38,out=[]; for(let i=0;i<n;i++){ const o=c.start+i*38; out.push({name:readCString(v,o,20),preset:v.getUint16(o+20,true),bank:v.getUint16(o+22,true),bagNdx:v.getUint16(o+24,true)}); } return out; }
+  _readInst(c){ const v=this.view,n=c.size/22,out=[]; for(let i=0;i<n;i++){ const o=c.start+i*22; out.push({name:readCString(v,o,20),bagNdx:v.getUint16(o+20,true)}); } return out; }
+  _readBag(c){ const v=this.view,n=c.size/4,out=[]; for(let i=0;i<n;i++){ const o=c.start+i*4; out.push({genNdx:v.getUint16(o,true),modNdx:v.getUint16(o+2,true)}); } return out; }
+  _readGen(c){
+    const v=this.view,n=c.size/4,out=[];
+    for(let i=0;i<n;i++){
+      const o=c.start+i*4; const op=v.getUint16(o,true);
+      const amount = (op===43||op===44) ? {lo:v.getUint8(o+2), hi:v.getUint8(o+3)} : v.getInt16(o+2,true);
+      out.push({op,amount});
+    }
+    return out;
+  }
+  _readShdr(c){
+    const v=this.view,n=c.size/46-1,out=[];
+    for(let i=0;i<n;i++){
+      const o=c.start+i*46;
+      out.push({name:readCString(v,o,20), start:v.getUint32(o+20,true), end:v.getUint32(o+24,true),
+        startLoop:v.getUint32(o+28,true), endLoop:v.getUint32(o+32,true), sampleRate:v.getUint32(o+36,true),
+        originalPitch:v.getUint8(o+40), pitchCorrection:v.getInt8(o+41)});
+    }
+    return out;
+  }
+  findPreset(bank, program){
+    return this.presets.find(p=>p.bank===bank && p.preset===program)
+        || this.presets.find(p=>p.bank===128 && p.preset===program)
+        || this.presets.find(p=>p.preset===program)
+        || null;
+  }
+}
+function sf2SplitGlobal(zones, terminalOp){
+  if(zones.length && !(terminalOp in zones[0])) return {global:zones[0], specific:zones.slice(1)};
+  return {global:null, specific:zones};
+}
+function sf2ZoneMatches(gens, note, vel){
+  const kr=gens[43], vr=gens[44];
+  if(kr && (note<kr.lo || note>kr.hi)) return false;
+  if(vr && (vel<vr.lo || vel>vr.hi)) return false;
+  return true;
+}
+function sf2Merge(global, specific){ return Object.assign({}, global||{}, specific); }
+function sf2VoiceParams(preset, note, vel){
+  const {global:pG, specific:pZ} = sf2SplitGlobal(preset.zones, 41);
+  const pZone = pZ.find(z=>sf2ZoneMatches(z,note,vel)) || pZ[0];
+  if(!pZone) return null;
+  const presetGens = sf2Merge(pG,pZone);
+  const instIdx = presetGens[41];
+  if(instIdx===undefined || !sf2.instruments[instIdx]) return null;
+  const inst = sf2.instruments[instIdx];
+  const {global:iG, specific:iZ} = sf2SplitGlobal(inst.zones, 53);
+  const iZone = iZ.find(z=>sf2ZoneMatches(z,note,vel)) || iZ[0];
+  if(!iZone) return null;
+  const instGens = sf2Merge(iG,iZone);
+  const sampleIdx = instGens[53];
+  if(sampleIdx===undefined || !sf2.samples[sampleIdx]) return null;
+  return {instGens, presetGens, sample: sf2.samples[sampleIdx]};
+}
+function sf2ComputeParams(instGens, presetGens){
+  const tc2s = tc => Math.pow(2, tc/1200);
+  const add = (op,def) => (instGens[op]!==undefined?instGens[op]:def) + (presetGens[op]!==undefined?presetGens[op]:0);
+  return {
+    pan: add(17,0)/500,
+    attenuationCb: add(48,0),
+    coarseTune: add(51,0),
+    fineTune: add(52,0),
+    sampleModes: instGens[54]!==undefined?instGens[54]:0,
+    overridingRootKey: instGens[58]!==undefined?instGens[58]:-1,
+    delay: tc2s(add(33,-12000)),
+    attack: tc2s(add(34,-12000)),
+    hold: tc2s(add(35,-12000)),
+    decay: tc2s(add(36,-12000)),
+    sustainCb: add(37,0),
+    release: tc2s(add(38,-12000)),
+  };
+}
+function sf2GetAudioBuffer(sample){
+  if(sample._buf) return sample._buf;
+  const len = Math.max(1, sample.end - sample.start);
+  const buf = actx.createBuffer(1, len, sample.sampleRate || 44100);
+  const data = buf.getChannelData(0);
+  const src = sf2.sampleData;
+  for(let i=0;i<len;i++) data[i] = (src[sample.start+i]||0)/32768;
+  sample._buf = buf;
+  return buf;
+}
+/* Applies a note's freehand pitch curve as continuous automation on an AudioParam that
+   represents pitch multiplicatively (playbackRate, or an oscillator's frequency divided by
+   its base). baseValue is the param's value with no bend applied; pitchCurve entries are
+   {t (0..1 within the note), semi (semitone offset)}. */
+/* Vibrato: a small sine-wave oscillator whose output is scaled and summed directly into the
+   pitch AudioParam (playbackRate or frequency), on top of whatever the base value / pitch curve
+   already set there. Depth is in semitones, speed in Hz. */
+/* Converts a note's vibrato ({depth, perBeat, delay}) into the {depth, speed(Hz), delay} shape
+   the voice engine expects, using whatever tempo is active at that note's tick — vibrato speed
+   is a musical/rhythmic concept (cycles per beat), so it should track tempo, not stay fixed in Hz. */
+function resolveVibratoHz(vibrato, tick){
+  if(!vibrato) return null;
+  const bpm = tempoAtTick(tick);
+  return { depth: vibrato.depth, speed: (vibrato.perBeat||0)*bpm/60, delay: vibrato.delay };
+}
+function applyVibrato(param, baseValue, when, dur, vibrato){
+  if(!vibrato || !vibrato.depth) return;
+  const delay = Math.min(Math.max(0, vibrato.delay||0), Math.max(0, dur-0.01));
+  const startAt = when+delay;
+  const lfo = actx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = Math.max(0.1, vibrato.speed||5);
+  const depthGain = actx.createGain();
+  depthGain.gain.value = baseValue*(Math.pow(2, vibrato.depth/12)-1);
+  lfo.connect(depthGain);
+  depthGain.connect(param);
+  lfo.start(startAt);
+  lfo.stop(when+dur+0.4);
+}
+function applyPitchCurveToParam(param, baseValue, when, dur, pitchCurve){
+  if(!pitchCurve || pitchCurve.length<2) return;
+  param.cancelScheduledValues(when);
+  pitchCurve.forEach((pt,i)=>{
+    const time = when + pt.t*dur;
+    const value = baseValue*Math.pow(2, pt.semi/12);
+    if(i===0) param.setValueAtTime(value, time);
+    else param.linearRampToValueAtTime(value, time);
+  });
+}
+function sf2Voice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato){
+  if(!sf2Ready) return false;
+  const tr = song.tracks[trackIdx];
+  const bank = tr.instrument===-1 ? 128 : 0;
+  const program = tr.instrument===-1 ? 0 : tr.instrument;
+  const preset = sf2.findPreset(bank, program);
+  if(!preset) return false;
+  const vp = sf2VoiceParams(preset, note, vel);
+  if(!vp) return false;
+  const params = sf2ComputeParams(vp.instGens, vp.presetGens);
+  const sample = vp.sample;
+  const buf = sf2GetAudioBuffer(sample);
+  const src = actx.createBufferSource();
+  src.buffer = buf;
+  const rootKey = params.overridingRootKey>=0 ? params.overridingRootKey : sample.originalPitch;
+  const semis = (note-rootKey) + params.coarseTune + params.fineTune/100 + (sample.pitchCorrection||0)/100;
+  const baseRate = Math.pow(2, semis/12);
+  src.playbackRate.value = baseRate;
+  applyPitchCurveToParam(src.playbackRate, baseRate, when, dur, pitchCurve);
+  applyVibrato(src.playbackRate, baseRate, when, dur, vibrato);
+  if(params.sampleModes===1 || params.sampleModes===3){
+    src.loop = true;
+    src.loopStart = Math.max(0,(sample.startLoop-sample.start))/sample.sampleRate;
+    src.loopEnd = Math.max(src.loopStart+0.001,(sample.endLoop-sample.start))/sample.sampleRate;
+  }
+  const g = actx.createGain();
+  const peak = Math.pow(10,-params.attenuationCb/200) * Math.max(0.05, vel/127);
+  const sustain = Math.max(0.0001, peak*Math.pow(10,-params.sustainCb/200));
+  const t0 = when + Math.max(0,params.delay);
+  const atk = Math.max(0.001, params.attack);
+  const hold = Math.max(0, params.hold);
+  const dec = Math.max(0.001, params.decay);
+  const REL = 0.3; // fixed release fade after note-off, regardless of the patch's own (often much longer) release time
+  const peakTime = t0+atk, holdEnd = peakTime+hold, decEnd = holdEnd+dec;
+  const noteOff = when+dur; // note-off always cuts whichever phase is in progress, like a real synth's note-off
+
+  g.gain.setValueAtTime(0, when);
+  g.gain.setValueAtTime(0, t0);
+  if(noteOff<=t0){
+    g.gain.setValueAtTime(0.0001, noteOff);
+  } else if(noteOff<=peakTime){
+    const v = peak*(noteOff-t0)/atk;
+    g.gain.linearRampToValueAtTime(Math.max(0.0001,v), noteOff);
+  } else if(noteOff<=holdEnd){
+    g.gain.linearRampToValueAtTime(Math.max(0.0001,peak), peakTime);
+    g.gain.setValueAtTime(Math.max(0.0001,peak), noteOff);
+  } else if(noteOff<=decEnd){
+    g.gain.linearRampToValueAtTime(Math.max(0.0001,peak), peakTime);
+    g.gain.setValueAtTime(Math.max(0.0001,peak), holdEnd);
+    const frac = (noteOff-holdEnd)/dec;
+    const v = peak + (sustain-peak)*frac;
+    g.gain.linearRampToValueAtTime(Math.max(0.0001,v), noteOff);
+  } else {
+    g.gain.linearRampToValueAtTime(Math.max(0.0001,peak), peakTime);
+    g.gain.setValueAtTime(Math.max(0.0001,peak), holdEnd);
+    g.gain.linearRampToValueAtTime(Math.max(0.0001,sustain), decEnd);
+    g.gain.setValueAtTime(Math.max(0.0001,sustain), noteOff);
+  }
+  g.gain.exponentialRampToValueAtTime(0.0001, noteOff+REL);
+  src.connect(g);
+  g.connect(trackNodes[trackIdx].gain);
+  src.start(when);
+  src.stop(noteOff+REL+0.05);
+  const handle = {src,g};
+  if(register) activeVoices.push(handle);
+  return handle;
+}
+
+/* ---- fallback procedural synth (used until a soundfont is ready, or if a
+   preset/sample lookup fails for the current track's instrument) ---- */
+function fallbackVoice(ctx, when, freq, dur, category, destNode, register, pitchCurve, vibrato){
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  g.connect(destNode);
+  if(category==='drum'){
+    const bufSize = ctx.sampleRate*0.2;
+    const buf = ctx.createBuffer(1,bufSize,ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<bufSize;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/bufSize,2);
+    const src = ctx.createBufferSource(); src.buffer=buf; src.connect(g);
+    src.start(when); src.stop(when+0.2);
+    g.gain.setValueAtTime(0.5, when);
+    g.gain.exponentialRampToValueAtTime(0.001, when+0.2);
+    if(register) activeVoices.push({src,g});
+    return {src,g};
+  }
+  const osc1 = ctx.createOscillator();
+  osc1.type = category==='pad' ? 'sawtooth' : category==='bass' ? 'sine' : 'triangle';
+  osc1.frequency.value = freq;
+  applyPitchCurveToParam(osc1.frequency, freq, when, dur, pitchCurve);
+  applyVibrato(osc1.frequency, freq, when, dur, vibrato);
+  osc1.connect(g);
+  const atk=0.01, rel=Math.min(0.4,dur*0.5);
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(0.28, when+atk);
+  g.gain.setValueAtTime(0.28, when+Math.max(atk,dur-rel));
+  g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
+  osc1.start(when); osc1.stop(when+dur+0.05);
+  if(register) activeVoices.push({src:osc1,g});
+  return {src:osc1,g};
+}
+function categoryFor(instrument){
+  if(instrument===-1) return 'drum';
+  const c = catOfInstrument(instrument);
+  if(c===4) return 'bass';
+  if(c===11||c===10) return 'pad';
+  return 'lead';
+}
+function midiToFreq(n){ return 440*Math.pow(2,(n-69)/12); }
+
+/* ---- Retro Synth: builds a PeriodicWave from the drawn waveform bars via a direct DFT
+   (bar count is small, so an O(n^2) DFT is plenty fast), then plays it as an oscillator ---- */
+function computePeriodicWave(samples){
+  const N = samples.length;
+  const numHarmonics = Math.floor(N/2)+1; // only these carry real information for a real-valued signal
+  const real = new Float32Array(numHarmonics), imag = new Float32Array(numHarmonics);
+  for(let k=0;k<numHarmonics;k++){
+    let sr=0, si=0;
+    for(let n=0;n<N;n++){
+      const angle = -2*Math.PI*k*n/N;
+      sr += samples[n]*Math.cos(angle);
+      si += samples[n]*Math.sin(angle);
+    }
+    real[k]=sr/N; imag[k]=si/N;
+  }
+  return actx.createPeriodicWave(real, imag, {disableNormalization:false});
+}
+function getRetroPeriodicWave(trackIdx){
+  if(periodicWaveCache[trackIdx]) return periodicWaveCache[trackIdx];
+  const tr = song.tracks[trackIdx];
+  const samples = getActiveWaveformSamples(tr);
+  const wave = computePeriodicWave(samples);
+  periodicWaveCache[trackIdx] = wave;
+  return wave;
+}
+function retroSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato){
+  const freq = midiToFreq(note);
+  const osc = actx.createOscillator();
+  osc.setPeriodicWave(getRetroPeriodicWave(trackIdx));
+  osc.frequency.value = freq;
+  applyPitchCurveToParam(osc.frequency, freq, when, dur, pitchCurve);
+  applyVibrato(osc.frequency, freq, when, dur, vibrato);
+  const g = actx.createGain();
+  const atk=0.008, rel=0.15;
+  const peak = Math.max(0.05, vel/127)*0.25;
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(peak, when+atk);
+  g.gain.setValueAtTime(peak, when+Math.max(atk, dur));
+  g.gain.exponentialRampToValueAtTime(0.0001, when+dur+rel);
+  osc.connect(g);
+  g.connect(trackNodes[trackIdx].gain);
+  osc.start(when); osc.stop(when+dur+rel+0.05);
+  const handle = {src:osc, g};
+  if(register) activeVoices.push(handle);
+  return handle;
+}
+
+/* Resolves which FM preset (algorithm/operators/envelope) a track is using at a given tick,
+   accounting for any track-level timbre-switch events ("from this measure, use memory slot N"). */
+function getFmPresetForTrack(tr, tick){
+  let slot = tr.fmMemorySlot||1;
+  if(tr.timbreEvents && tr.timbreEvents.length){
+    const applicable = tr.timbreEvents.filter(e=>measureStartTick(e.measure)<=tick);
+    if(applicable.length){
+      applicable.sort((a,b)=>a.measure-b.measure);
+      slot = applicable[applicable.length-1].slot;
+    }
+  }
+  return (song.fmMemory && song.fmMemory[slot-1]) || defaultFmPreset();
+}
+/* Builds the operator graph (oscillators, modulation routing, feedback, envelope) on any given
+   AudioContext/destination — shared by live playback and by the silent offline preview render,
+   so the preview is guaranteed to sound (and look) exactly like what will actually play. */
+function buildFmGraph(ctx, destNode, when, freq, preset, dur, vel){
+  const algo = FM_ALGORITHMS[preset.algorithm||0];
+  const ops = preset.operators || defaultFmOperators();
+  const env = preset.envelope || defaultFmEnvelope();
+  const oscs = ops.map(o=>{
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    const f = freq*(o.ratio||1);
+    osc.frequency.value = f;
+    const startDelay = ((o.phase||0)/(2*Math.PI)) * (1/Math.max(1,f));
+    osc.start(when+startDelay);
+    return {osc, freq:f, level: o.level!=null?o.level:1, feedback:!!o.feedback};
+  });
+  oscs.forEach(o=>{
+    if(!o.feedback) return;
+    const fbGain = ctx.createGain(); fbGain.gain.value = o.freq*0.5*o.level;
+    const fbDelay = ctx.createDelay(); fbDelay.delayTime.value = 1/ctx.sampleRate;
+    o.osc.connect(fbGain); fbGain.connect(fbDelay); fbDelay.connect(o.osc.frequency);
+  });
+  algo.mods.forEach(([modIdx,destIdx])=>{
+    const modOp = oscs[modIdx], destOp = oscs[destIdx];
+    if(!modOp || !destOp) return;
+    const modGain = ctx.createGain(); modGain.gain.value = modOp.freq*modOp.level;
+    modOp.osc.connect(modGain); modGain.connect(destOp.osc.frequency);
+  });
+  const g = ctx.createGain(); g.gain.value=0;
+  algo.carriers.forEach(ci=>{
+    const op = oscs[ci]; if(!op) return;
+    const carGain = ctx.createGain(); carGain.gain.value = op.level*0.3;
+    op.osc.connect(carGain); carGain.connect(g);
+  });
+  const atk=Math.max(0.002,env.attack), dec=Math.max(0.002,env.decay);
+  const sus=Math.max(0,Math.min(1,env.sustain)), rel=Math.max(0.01,env.release);
+  const peak = Math.max(0.05, vel/127);
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(peak, when+atk);
+  g.gain.linearRampToValueAtTime(peak*sus, when+atk+dec);
+  const relStart = Math.max(when+atk+dec, when+dur);
+  g.gain.setValueAtTime(peak*sus, relStart);
+  g.gain.exponentialRampToValueAtTime(0.0001, relStart+rel);
+  g.connect(destNode);
+  const stopTime = relStart+rel+0.05;
+  oscs.forEach(o=>o.osc.stop(stopTime));
+  return {oscs, gainNode:g, stopTime};
+}
+function fmSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, presetOverride){
+  const tr = song.tracks[trackIdx];
+  const preset = presetOverride || getFmPresetForTrack(tr, 0);
+  const baseFreq = midiToFreq(note);
+  const {oscs, gainNode} = buildFmGraph(actx, trackNodes[trackIdx].gain, when, baseFreq, preset, dur, vel);
+  oscs.forEach(o=>{
+    applyPitchCurveToParam(o.osc.frequency, o.freq, when, dur, pitchCurve);
+    applyVibrato(o.osc.frequency, o.freq, when, dur, vibrato);
+  });
+  const handle = {src:oscs[0].osc, g:gainNode, extraOscs:oscs.slice(1).map(o=>o.osc)};
+  if(register) activeVoices.push(handle);
+  return handle;
+}
+
+function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, noteTick){
+  const tr = song.tracks[trackIdx];
+  if(tr.instrumentType==='fm'){
+    try{ return fmSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, getFmPresetForTrack(tr, noteTick||0)); }
+    catch(err){ console.warn('FM synth voice failed, falling back', err); }
+  }
+  if(tr.instrumentType==='synth'){
+    try{ return retroSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato); }
+    catch(err){ console.warn('retro synth voice failed, falling back', err); }
+  }
+  if(sf2Ready){
+    try{ const h = sf2Voice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato); if(h) return h; }
+    catch(err){ console.warn('sf2 voice failed, falling back', err); }
+  }
+  return fallbackVoice(actx, when, midiToFreq(note), dur, categoryFor(tr.instrument), trackNodes[trackIdx].gain, register, pitchCurve, vibrato);
+}
+
+/* ---- audio graph: master -> per-track (gain -> pan) ---- */
+let actx=null, masterGain=null, trackNodes=[];
+let sf2=null, sf2Ready=false, sf2LoadStarted=false;
+let activeVoices=[]; // nodes currently scheduled as part of song playback, so stop can actually silence them
+function stopVoiceHandle(v, now){
+  try{
+    v.g.gain.cancelScheduledValues(now);
+    v.g.gain.setValueAtTime(v.g.gain.value, now);
+    v.g.gain.linearRampToValueAtTime(0.0001, now+0.03);
+    v.src.stop(now+0.05);
+    if(v.extraOscs) v.extraOscs.forEach(o=>{ try{ o.stop(now+0.05); }catch(e){} });
+  }catch(err){ /* already stopped/ended — fine to ignore */ }
+}
+function stopAllVoices(){
+  if(!actx) { activeVoices=[]; return; }
+  const now = actx.currentTime;
+  activeVoices.forEach(v=>stopVoiceHandle(v, now));
+  activeVoices = [];
+}
+function ensureAudio(){
+  if(actx) return actx;
+  actx = new (window.AudioContext||window.webkitAudioContext)();
+  masterGain = actx.createGain(); masterGain.gain.value=0.9; masterGain.connect(actx.destination);
+  buildTrackNodes();
+  if(!sf2LoadStarted){ sf2LoadStarted=true; loadDefaultSF2(); }
+  return actx;
+}
+function effectiveTrackGain(tr){
+  const anySolo = song.tracks.some(t=>t.solo);
+  const audible = anySolo ? tr.solo : !tr.muted;
+  return audible ? tr.volume/127 : 0;
+}
+function updateTrackAudibility(){
+  if(!actx) return;
+  song.tracks.forEach((tr,i)=>{ if(trackNodes[i]) trackNodes[i].gain.gain.value = effectiveTrackGain(tr); });
+}
+function buildTrackNodes(withAnalyser=true){
+  trackNodes = song.tracks.map(tr=>{
+    const g = actx.createGain(); g.gain.value = effectiveTrackGain(tr);
+    const p = actx.createStereoPanner(); p.pan.value = tr.pan/100;
+    if(withAnalyser){
+      const an = actx.createAnalyser(); an.fftSize = 1024;
+      g.connect(p); p.connect(an); an.connect(masterGain);
+      return {gain:g, pan:p, analyser:an};
+    }
+    g.connect(p); p.connect(masterGain);
+    return {gain:g, pan:p, analyser:null};
+  });
+}
+function syncTrackNodesFromSong(){
+  if(!actx) return;
+  if(trackNodes.length!==song.tracks.length) buildTrackNodes();
+  song.tracks.forEach((tr,i)=>{
+    trackNodes[i].gain.gain.value = effectiveTrackGain(tr);
+    trackNodes[i].pan.pan.value = tr.pan/100;
+  });
+}
+
+/* ---- soundfont loading: default (fetched once, cached in IndexedDB) + custom file ---- */
+const SF2_DEFAULT_URL = 'https://raw.githubusercontent.com/arbruijn/TimGM6mb/master/TimGM6mb.sf2';
+const SF2_DB='midsequerplus-sf2', SF2_STORE='files';
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const req = indexedDB.open(SF2_DB,1);
+    req.onupgradeneeded=()=>{ req.result.createObjectStore(SF2_STORE); };
+    req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error);
+  });
+}
+async function idbGet(key){
+  const db=await idbOpen();
+  return new Promise((res,rej)=>{ const rq=db.transaction(SF2_STORE,'readonly').objectStore(SF2_STORE).get(key); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); });
+}
+async function idbSet(key,val){
+  const db=await idbOpen();
+  return new Promise((res,rej)=>{ const tx=db.transaction(SF2_STORE,'readwrite'); tx.objectStore(SF2_STORE).put(val,key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
+}
+function showToast(msg, ms=2600){
+  let t=document.getElementById('toastEl');
+  if(!t){ t=document.createElement('div'); t.id='toastEl';
+    t.style.cssText='position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#2a2e38;color:#e9ecf1;padding:8px 16px;border-radius:20px;font-size:12.5px;z-index:200;box-shadow:0 2px 10px rgba(0,0,0,.4);max-width:86vw;text-align:center;transition:opacity .4s;';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._h);
+  t._h=setTimeout(()=>{ t.style.opacity='0'; }, ms);
+}
+async function loadDefaultSF2(){
+  try{
+    let buf = await idbGet('default').catch(()=>null);
+    if(!buf){
+      showToast('サウンドフォントを取得中… (初回のみ)');
+      const res = await fetch(SF2_DEFAULT_URL);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      buf = await res.arrayBuffer();
+      idbSet('default', buf).catch(()=>{});
+    }
+    sf2 = new SF2(buf);
+    sf2Ready = true;
+    showToast('サウンドフォント読込完了');
+  }catch(err){
+    console.warn('default sf2 load failed', err);
+    showToast('サウンドフォントを取得できませんでした(オフライン等)。仮の音源で再生します');
+  }
+}
+async function loadCustomSF2File(file){
+  try{
+    showToast('sf2を読込中: '+file.name);
+    const buf = await file.arrayBuffer();
+    const parsed = new SF2(buf);
+    sf2 = parsed; sf2Ready = true;
+    idbSet('custom_last', buf).catch(()=>{});
+    showToast('sf2読込完了: '+file.name);
+  }catch(err){
+    console.error(err);
+    showToast('sf2の読込に失敗しました: '+err.message);
+  }
+}
+
+let previewVoices=[]; // short one-shot preview notes (tap-select feedback, move-drag pitch preview) — force-stopped on gesture end
+function playPreview(trackIdx, pitch){
+  ensureAudio();
+  const h = triggerNote(trackIdx, actx.currentTime, pitch, 100, 0.5, false);
+  if(h) previewVoices.push(h);
+}
+function stopAllPreviewVoices(){
+  if(!actx){ previewVoices=[]; return; }
+  const now = actx.currentTime;
+  previewVoices.forEach(v=>stopVoiceHandle(v, now));
+  previewVoices=[];
+}
+function stopNotePreview(){ stopAllPreviewVoices(); }
+
+/* ---- transport / scheduling ---- */
+let playing=false, playheadTick=0, playStartTime=0, playStartTick=0, schedTimer=null;
+
+/* Tempo map: song.tempoChanges is a list of {tick, bpm} (absolute ticks, sorted ascending).
+   tickToSeconds/secondsToTick integrate through every segment rather than assuming one constant
+   tempo, so MIDI files with tempo changes play back correctly. The cumulative table is cached
+   and only rebuilt when the tempo map actually changes (invalidateTempoCache). IMPORTANT: because
+   tempo can change at arbitrary absolute ticks, always convert absolute ticks and take the
+   difference for a duration — tickToSeconds(a)-tickToSeconds(b) is correct, tickToSeconds(a-b) is
+   NOT (a delta-tick doesn't know which tempo segment(s) it actually spans on the real timeline). */
+let tempoCumCache = null;
+function invalidateTempoCache(){ tempoCumCache = null; }
+function buildTempoCumCache(){
+  const raw = (song.tempoChanges && song.tempoChanges.length) ? song.tempoChanges : [{tick:0, bpm:song.tempo}];
+  const changes = [...raw].sort((a,b)=>a.tick-b.tick);
+  if(changes[0].tick!==0) changes.unshift({tick:0, bpm:changes[0].bpm});
+  let cum=0;
+  const table=[{tick:0, seconds:0, bpm:changes[0].bpm}];
+  for(let i=1;i<changes.length;i++){
+    const prev=changes[i-1], cur=changes[i];
+    cum += (cur.tick-prev.tick)/PPQ*(60/prev.bpm);
+    table.push({tick:cur.tick, seconds:cum, bpm:cur.bpm});
+  }
+  tempoCumCache = table;
+}
+function tickToSeconds(tick){
+  if(!tempoCumCache) buildTempoCumCache();
+  let seg = tempoCumCache[0];
+  for(let i=0;i<tempoCumCache.length;i++){ if(tempoCumCache[i].tick<=tick) seg=tempoCumCache[i]; else break; }
+  return seg.seconds + (tick-seg.tick)/PPQ*(60/seg.bpm);
+}
+function secondsToTick(seconds){
+  if(!tempoCumCache) buildTempoCumCache();
+  let seg = tempoCumCache[0];
+  for(let i=0;i<tempoCumCache.length;i++){ if(tempoCumCache[i].seconds<=seconds) seg=tempoCumCache[i]; else break; }
+  return seg.tick + (seconds-seg.seconds)*seg.bpm/60*PPQ;
+}
+/* duration in seconds between two absolute ticks, tempo-map aware */
+function tickSpanSeconds(startTick, endTick){ return tickToSeconds(endTick) - tickToSeconds(startTick); }
+function tempoAtTick(tick){
+  if(!tempoCumCache) buildTempoCumCache();
+  let seg = tempoCumCache[0];
+  for(let i=0;i<tempoCumCache.length;i++){ if(tempoCumCache[i].tick<=tick) seg=tempoCumCache[i]; else break; }
+  return seg.bpm;
+}
+document.getElementById('playBtn').onclick=()=>{
+  if(playing) stopPlayback(); else startPlayback(Math.max(0,Math.round(view.scrollX)));
+};
+document.getElementById('toStartBtn').onclick=()=>{
+  if(playing) stopPlayback(); else startPlayback(0);
+};
+document.getElementById('playFlagBtn').onclick=()=>{
+  if(playing) stopPlayback(); else startPlayback(currentFlagTick());
+};
+document.getElementById('prevFlagBtn').addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  if(!song.flags.length) return;
+  song.currentFlagIndex = song.currentFlagIndex<=0 ? song.flags.length-1 : song.currentFlagIndex-1;
+  view.scrollX = currentFlagTick();
+  refreshActiveDragAfterViewJump();
+});
+document.getElementById('nextFlagBtn').addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  if(!song.flags.length) return;
+  song.currentFlagIndex = (song.currentFlagIndex+1)%song.flags.length;
+  view.scrollX = currentFlagTick();
+  refreshActiveDragAfterViewJump();
+});
+document.getElementById('loopToggleBtn').onclick=(e)=>{
+  loopEnabled = !loopEnabled;
+  e.currentTarget.classList.toggle('active', loopEnabled);
+};
+document.getElementById('loopRangeBtn').onclick=()=>{
+  if(loopEndTickVal===null) loopEndTickVal = measureStartTick(5); // first-time default: 4 measures
+  document.getElementById('loopStartMeasure').value = tickToBeatSnappedDecimal(loopStartTickVal);
+  document.getElementById('loopEndMeasure').value = tickToBeatSnappedDecimal(loopEndTickVal);
+  openOverlay('loopRangeOverlay');
+};
+document.getElementById('loopRangeOk').onclick=()=>{
+  const rawStart = Math.max(1, +document.getElementById('loopStartMeasure').value||1);
+  const rawEnd = +document.getElementById('loopEndMeasure').value||(rawStart+4);
+  let startTick = beatSnappedMeasureToTick(rawStart);
+  let endTick = beatSnappedMeasureToTick(Math.max(rawStart, rawEnd));
+  if(endTick<=startTick) endTick = startTick + PPQ*4; // guard against a zero/negative range
+  loopStartTickVal = startTick;
+  loopEndTickVal = endTick;
+  closeOverlay('loopRangeOverlay');
+};
+function updateFlagIdxLabel(){
+  const lbl = document.getElementById('flagIdxLabel');
+  lbl.textContent = song.flags.length ? `旗${song.currentFlagIndex+1}/${song.flags.length}` : '旗-';
+}
+
+function startPlayback(fromTick){
+  ensureAudio();
+  playing=true;
+  [document.getElementById('playBtn'),document.getElementById('toStartBtn'),document.getElementById('playFlagBtn')].forEach(b=>b.classList.remove('playing'));
+  const activeBtn = fromTick===0 ? document.getElementById('toStartBtn')
+    : (fromTick===currentFlagTick() && song.currentFlagIndex>=0 ? document.getElementById('playFlagBtn') : document.getElementById('playBtn'));
+  activeBtn.classList.add('playing');
+  activeBtn.textContent = activeBtn.id==='playBtn' ? '■' : activeBtn.textContent;
+  playStartTick = Math.max(0, Math.round(fromTick));
+  playStartTime = actx.currentTime + 0.05;
+  activeVoices = [];
+  buildScheduleQueue();
+  runScheduler();
+  clearInterval(schedulerInterval);
+  schedulerInterval = setInterval(runScheduler, SCHEDULE_INTERVAL_MS);
+  tickLoop();
+}
+function stopPlayback(){
+  playing=false;
+  document.getElementById('playBtn').classList.remove('playing');
+  document.getElementById('playBtn').textContent='▶';
+  document.getElementById('toStartBtn').classList.remove('playing');
+  document.getElementById('playFlagBtn').classList.remove('playing');
+  clearTimeout(schedTimer);
+  clearInterval(schedulerInterval);
+  stopAllVoices();
+}
+/* used when tempo/instrument changes while playing: cut everything and restart scheduling
+   from the current playhead position so the change is heard immediately */
+function reschedulePlaybackNow(){
+  if(!playing) return;
+  const resumeTick = Math.max(0, Math.round(playheadTick));
+  stopAllVoices();
+  playStartTick = resumeTick;
+  playStartTime = actx.currentTime + 0.03;
+  activeVoices = [];
+  buildScheduleQueue();
+}
+
+/* ---- lookahead scheduler: only create audio nodes for notes starting within the next
+   SCHEDULE_AHEAD_TIME seconds, checked every SCHEDULE_INTERVAL_MS. This spreads node
+   creation over the whole playback instead of building the entire song's worth of nodes
+   synchronously at the moment Play is pressed (which was blocking the main thread long
+   enough to cause silence/dropouts/an apparently-slow tempo on bigger songs). ---- */
+const SCHEDULE_AHEAD_TIME = 0.2;
+const SCHEDULE_INTERVAL_MS = 40;
+let scheduleQueue=[], scheduleIdx=0, scheduleEndTick=0, schedulerInterval=null;
+function buildScheduleQueue(){
+  const q=[];
+  song.tracks.forEach((tr,ti)=>{
+    tr.notes.forEach(nt=>{
+      if(nt.startTick>=playStartTick) q.push({ti,nt});
+    });
+  });
+  q.sort((a,b)=>a.nt.startTick-b.nt.startTick);
+  scheduleQueue=q; scheduleIdx=0;
+  scheduleEndTick = q.length ? Math.max(...q.map(x=>x.nt.startTick+x.nt.lengthTick)) : playStartTick;
+}
+function runScheduler(){
+  if(!playing) return;
+  const nowTick = secondsToTick(tickToSeconds(playStartTick) + (actx.currentTime-playStartTime));
+  const aheadTick = secondsToTick(tickToSeconds(nowTick) + SCHEDULE_AHEAD_TIME);
+  while(scheduleIdx<scheduleQueue.length && scheduleQueue[scheduleIdx].nt.startTick<=aheadTick){
+    const {ti,nt} = scheduleQueue[scheduleIdx];
+    const when = playStartTime + tickSpanSeconds(playStartTick, nt.startTick);
+    const dur = Math.max(0.01, tickSpanSeconds(nt.startTick, effectiveNoteEndTick(ti, nt)));
+    triggerNote(ti, when, nt.pitch, 100, dur, true, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick);
+    scheduleIdx++;
+  }
+  if(!loopEnabled && scheduleIdx>=scheduleQueue.length && nowTick > scheduleEndTick+ (PPQ*2)){
+    stopPlayback();
+  }
+}
+function tickLoop(){
+  if(!playing) return;
+  const elapsed = actx.currentTime - playStartTime;
+  playheadTick = secondsToTick(tickToSeconds(playStartTick) + elapsed);
+  if(loopEnabled){
+    const loopEndTick = loopEndTickVal===null ? measureStartTick(5) : loopEndTickVal;
+    if(playheadTick >= loopEndTick){
+      stopAllVoices();
+      playStartTick = loopStartTickVal;
+      playStartTime = actx.currentTime + 0.02;
+      activeVoices = [];
+      buildScheduleQueue();
+      playheadTick = playStartTick;
+    }
+  }
+  const gw = gridCanvas.width/(window.devicePixelRatio||1);
+  const marginTicks = (gw*0.15)/view.pxPerTick; // keep the playhead ~15% in from the left edge
+  view.scrollX = Math.max(0, playheadTick - marginTicks);
+  drawGrid(); drawFlagStrip(); updateScrollbars(); updatePosLabel(); updateTimesigLabel();
+  if(pitchEditMode) drawPitchOverlay();
+  requestAnimationFrame(tickLoop);
+}
+function updatePosLabel(){
+  const t = playing ? playheadTick : view.scrollX;
+  const m = tickToMeasure(t);
+  const ts = tsForMeasure(m);
+  const measStart = measureStartTick(m);
+  const beatTicks = PPQ*4/ts.den;
+  const beat = Math.floor((t-measStart)/beatTicks)+1;
+  document.getElementById('posLabel').textContent = m+':'+beat;
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init(){
+  view.pxPerTick = Math.max(0.018, view.pxPerTick/Math.pow(1.3,3));
+  view.rowH = Math.max(6, view.rowH/Math.pow(1.2,2));
+  resizeCanvases();
+  drawAll();
+  document.getElementById('modeBtn').textContent='✎';
+  updatePitchOverlayInteractivity();
+}
+window.addEventListener('load', init);
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(console.error);
+  });
+}
+</script>
+</body>
+</html>
