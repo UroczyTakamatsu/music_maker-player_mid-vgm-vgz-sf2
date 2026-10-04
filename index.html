@@ -3111,56 +3111,146 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         const vp=preset ? sf2VoiceParams(preset,n.p,vel) : null;
         if(vp){
           const params=sf2ComputeParams(vp.instGens,vp.presetGens);
-          const sample=vp.sample;
-          const src=sf2.sampleData;
+          const sample=vp.sample, src=sf2.sampleData;
           const sampleLen=Math.max(1,sample.end-sample.start);
           const rootKey=params.overridingRootKey>=0 ? params.overridingRootKey : sample.originalPitch;
-          const baseRate=Math.pow(2,((n.p-rootKey)+params.coarseTune+params.fineTune/100+(sample.pitchCorrection||0)/100)/12);
-          const peak=Math.pow(10,-params.attenuationCb/200)*Math.max(.05,vel/127);
-          const sustain=Math.max(.0001,peak*Math.pow(10,-params.sustainCb/200));
-          const t0=Math.max(0,params.delay);
-          const atk=Math.max(.001,params.attack), hold=Math.max(0,params.hold), dec=Math.max(.001,params.decay);
-          const rel=Math.min(1.2,Math.max(.03,params.release));
-          const peakTime=t0+atk, holdEnd=peakTime+hold, decEnd=holdEnd+dec;
+
+          // SF2 modulators. We implement the note-static sources that matter most
+          // during offline rendering (velocity, key, pitch wheel), plus their
+          // standard destinations. Channel controllers are intentionally left at
+          // their neutral value because a MIDI note in this renderer does not carry
+          // a controller snapshot.
+          const modSrcValue=(srcOper)=>{
+            const idx=srcOper&0x7f;
+            let v=0;
+            if(idx===2) v=Math.max(0,Math.min(1,vel/127));       // note-on velocity
+            else if(idx===3) v=Math.max(0,Math.min(1,n.p/127)); // key number
+            else if(idx===14) v=.5;                            // pitch wheel center
+            else v=0;
+            if(srcOper&0x200) v=1-v; // polarity: negative
+            if(srcOper&0x100) v=-v;  // direction
+            return v;
+          };
+          // Parsed SF2 modulators are intentionally applied conservatively here.
+          // Full SF2 source transforms (concave/convex/switch/bipolar/direction) are
+          // easy to misinterpret; an incorrect attenuation mod can make valid notes
+          // effectively silent. Velocity is already handled explicitly below, so we
+          // do not add generic modulator attenuation until the full transform matrix
+          // is implemented. Pitch/filter destinations are retained with hard safety
+          // caps so malformed/unusual fonts cannot destroy note audibility.
+          let modAtt=0, modPitch=0, modFilter=0;
+          for(const m of (vp.mods||[])){
+            const sv=modSrcValue(m.src);
+            if(!Number.isFinite(sv) || !Number.isFinite(m.amount)) continue;
+            const av=sv*m.amount;
+            if(m.dest===5 || m.dest===6 || m.dest===7) modPitch+=Math.max(-50,Math.min(50,av));
+            else if(m.dest===8 || m.dest===10 || m.dest===11) modFilter+=Math.max(-1200,Math.min(1200,av));
+          }
+          modPitch=Math.max(-100,Math.min(100,modPitch));
+          modFilter=Math.max(-2400,Math.min(2400,modFilter));
+
+          const semisBase=(n.p-rootKey)+params.coarseTune+params.fineTune/100+(sample.pitchCorrection||0)/100;
+          const baseRate=Math.pow(2,semisBase/12);
+          const peak=Math.pow(10,-(params.attenuationCb+modAtt)/200)*Math.max(.015,vel/127);
+          const sustain=Math.max(.00001,peak*Math.pow(10,-params.sustainCb/200));
+
+          // SF2 key scaling for volume-envelope hold/decay. Values are
+          // timecents-per-key around MIDI key 60.
+          const keyDelta=n.p-60;
+          const tc2s=tc=>Math.pow(2,tc/1200);
+          const delay=Math.max(0,Math.min(2,params.delay));
+          const attack=Math.max(.0005,Math.min(10,params.attack));
+          const hold=Math.max(0,Math.min(10,params.hold*tc2s(-params.keyVolHold*keyDelta)));
+          const decay=Math.max(.0005,Math.min(20,params.decay*tc2s(-params.keyVolDecay*keyDelta)));
+          const rel=Math.max(.005,Math.min(20,params.release));
+          const peakTime=delay+attack, holdEnd=peakTime+hold, decEnd=holdEnd+decay;
+
           const looped=params.sampleModes===1 || params.sampleModes===3;
           const loopStart=Math.max(0,sample.startLoop-sample.start);
-          const loopEnd=Math.max(loopStart+1,Math.min(sampleLen,sample.endLoop-sample.start));
+          const loopEnd=Math.max(loopStart+2,Math.min(sampleLen,sample.endLoop-sample.start));
           const samplePan=Math.max(-1,Math.min(1,params.pan));
-          const totalPan=Math.max(-1,Math.min(1,(tr.pan||0)/100 + samplePan));
+          const totalPan=Math.max(-1,Math.min(1,(tr.pan||0)/100+samplePan));
           const pa=(totalPan+1)*Math.PI/4;
-          const notePanL=Math.cos(pa)*tr.gain;
-          const notePanR=Math.sin(pa)*tr.gain;
+          const notePanL=Math.cos(pa)*tr.gain, notePanR=Math.sin(pa)*tr.gain;
+
+          // RBJ low-pass filter. SF2 initialFilterFc is in cents and Q is 0.1 dB.
+          // Coefficients are refreshed periodically when an envelope/LFO changes
+          // the cutoff; this avoids a per-sample coefficient calculation.
+          let fx1=0,fx2=0,fy1=0,fy2=0, fLast=-1, qLast=-1;
+          let b0=1,b1=0,b2=0,a1=0,a2=0,filterOn=false;
+          const setFilter=(cutoff,q)=>{
+            const fc=Math.max(20,Math.min(sr*.47,cutoff));
+            const qq=Math.max(.25,Math.min(18,q));
+            if(Math.abs(fc-fLast)<.25 && Math.abs(qq-qLast)<.01) return;
+            fLast=fc; qLast=qq;
+            const w0=2*Math.PI*fc/sr, c=Math.cos(w0), s=Math.sin(w0);
+            const alpha=s/(2*qq);
+            const aa0=1+alpha;
+            b0=(1-c)/2/aa0; b1=(1-c)/aa0; b2=b0;
+            a1=(-2*c)/aa0; a2=(1-alpha)/aa0;
+            filterOn=fc<sr*.46;
+          };
+
           let srcPos=0;
+          const interp4=(pos)=>{
+            let i=Math.floor(pos), f=pos-i;
+            if(looped){
+              if(i<0) i=0;
+              if(i>=loopEnd){ const span=loopEnd-loopStart; i=loopStart+((i-loopStart)%span); }
+            }
+            const idx=i;
+            const at=k=>{
+              let q=k;
+              if(looped){
+                if(q<loopStart) q=loopStart;
+                if(q>=loopEnd){ const span=loopEnd-loopStart; q=loopStart+((q-loopStart)%span); }
+              }
+              q=Math.max(0,Math.min(sampleLen-1,q));
+              return (src[sample.start+q]||0)/32768;
+            };
+            // 4-point Hermite interpolation: noticeably cleaner pitch shifting
+            // than linear interpolation, especially for high notes.
+            const y0=at(idx-1), y1=at(idx), y2=at(idx+1), y3=at(idx+2);
+            const c0=y1, c1=.5*(y2-y0), c2=y0-2.5*y1+2*y2-.5*y3, c3=.5*(y3-y0)+1.5*(y1-y2);
+            return ((c3*f+c2)*f+c1)*f+c0;
+          };
+
           for(let fr=start;fr<end;fr++){
             const age=(fr-start)/sr;
-            const pm=pitchMulAt(n,age);
-            const rate=baseRate*pm*(sample.sampleRate||44100)/sr;
-            if(age<t0) { srcPos+=rate; continue; }
-            if(looped && srcPos>=loopEnd){
-              const span=Math.max(1,loopEnd-loopStart);
-              srcPos=loopStart+((srcPos-loopStart)%span);
-            }
-            const si=Math.floor(srcPos);
-            const frac=srcPos-si;
-            let smp=0;
-            if(si>=0 && si<sampleLen){
-              const a=(src[sample.start+si]||0)/32768;
-              const b=(src[sample.start+Math.min(si+1,sampleLen-1)]||0)/32768;
-              smp=a+(b-a)*frac;
-            }else if(looped && si>=loopStart){
-              const span=Math.max(1,loopEnd-loopStart);
-              const wrapped=loopStart+((si-loopStart)%span);
-              const a=(src[sample.start+wrapped]||0)/32768;
-              const b=(src[sample.start+Math.min(wrapped+1,loopEnd-1)]||0)/32768;
-              smp=a+(b-a)*frac;
-            }
+            if(age<delay){ srcPos += baseRate*(sample.sampleRate||44100)/sr; continue; }
+            const pm0=pitchMulAt(n,age);
+            // SF2 LFO/envelope pitch contributions are expressed in cents.
+            const modLfo=age>=params.delayModLfo ? Math.sin(2*Math.PI*params.freqModLfo*(age-params.delayModLfo)) : 0;
+            const vibLfo=age>=params.delayVibLfo ? Math.sin(2*Math.PI*params.freqVibLfo*(age-params.delayVibLfo)) : 0;
+            const envNorm=age<peakTime ? 0 : age<holdEnd ? 1 : age<decEnd ? 1-(age-holdEnd)/Math.max(.0005,decay) : age<dur ? 0 : 0;
+            const pitchCents=modPitch + params.modLfoToPitch*modLfo + params.vibLfoToPitch*vibLfo + params.modEnvToPitch*envNorm;
+            const rate=baseRate*pm0*Math.pow(2,pitchCents/1200)*(sample.sampleRate||44100)/sr;
+            if(looped && srcPos>=loopEnd){ const span=Math.max(1,loopEnd-loopStart); srcPos=loopStart+((srcPos-loopStart)%span); }
+            let smp=interp4(srcPos);
             srcPos+=rate;
+
+            // SF2 volume envelope with key scaling and a release derived from the
+            // actual patch instead of the old fixed 300 ms fade.
             let e=0;
-            if(age<peakTime) e=peak*(age-t0)/atk;
+            if(age<delay) e=0;
+            else if(age<peakTime) e=peak*(age-delay)/attack;
             else if(age<holdEnd) e=peak;
-            else if(age<decEnd) e=peak+(sustain-peak)*((age-holdEnd)/dec);
+            else if(age<decEnd) e=peak+(sustain-peak)*((age-holdEnd)/decay);
             else if(age<dur) e=sustain;
-            else if(age<dur+rel) e=sustain*Math.pow(.0001/Math.max(.0001,sustain),(age-dur)/rel);
+            else if(age<dur+rel) e=sustain*Math.pow(.0001/Math.max(.00001,sustain),(age-dur)/rel);
+            else e=0;
+
+            // Filter cutoff in cents. Mod LFO/env destinations are additive in cents.
+            let envFilter=0;
+            if(age>=peakTime && age<decEnd) envFilter=1-(age-holdEnd)/Math.max(.0005,decay);
+            const filterCents=params.filterFc + modFilter + params.modLfoToFilter*modLfo + params.modEnvToFilter*envFilter;
+            const cutoff=8.176*Math.pow(2,filterCents/1200);
+            const q=.707*Math.pow(10,params.filterQ/200);
+            setFilter(cutoff,q);
+            if(filterOn){
+              const y=b0*smp+b1*fx1+b2*fx2-a1*fy1-a2*fy2;
+              fx2=fx1; fx1=smp; fy2=fy1; fy1=y; smp=y;
+            }
             const x=smp*e;
             addSample(fr,x,notePanL,notePanR);
           }
@@ -4121,16 +4211,22 @@ class SF2 {
         pd[id]={start:p+8,size}; p += 8+size+(size%2);
       }
     }
-    const phdr=this._readPhdr(pd.phdr), pbag=this._readBag(pd.pbag), pgen=this._readGen(pd.pgen);
-    const inst=this._readInst(pd.inst), ibag=this._readBag(pd.ibag), igen=this._readGen(pd.igen);
+    const phdr=this._readPhdr(pd.phdr), pbag=this._readBag(pd.pbag), pgen=this._readGen(pd.pgen), pmod=this._readMod(pd.pmod);
+    const inst=this._readInst(pd.inst), ibag=this._readBag(pd.ibag), igen=this._readGen(pd.igen), imod=this._readMod(pd.imod);
     this.samples=this._readShdr(pd.shdr);
 
+    const modsForBag=(mods,bags,b)=>{
+      if(!mods || !bags || !bags[b]) return [];
+      const a=bags[b].modNdx, z=(bags[b+1]||{modNdx:a}).modNdx;
+      return mods.slice(a,z);
+    };
     this.instruments = inst.slice(0,-1).map((ins,i)=>{
       const zones=[];
       for(let b=ins.bagNdx;b<inst[i+1].bagNdx;b++){
         const gens={};
         for(let g=ibag[b].genNdx; g<ibag[b+1].genNdx; g++) gens[igen[g].op]=igen[g].amount;
-        zones.push(gens);
+        const mods=modsForBag(imod,ibag,b);
+        zones.push({gens,mods});
       }
       return {name:ins.name, zones};
     });
@@ -4139,7 +4235,8 @@ class SF2 {
       for(let b=ph.bagNdx;b<phdr[i+1].bagNdx;b++){
         const gens={};
         for(let g=pbag[b].genNdx; g<pbag[b+1].genNdx; g++) gens[pgen[g].op]=pgen[g].amount;
-        zones.push(gens);
+        const mods=modsForBag(pmod,pbag,b);
+        zones.push({gens,mods});
       }
       return {name:ph.name, preset:ph.preset, bank:ph.bank, zones};
     });
@@ -4153,6 +4250,15 @@ class SF2 {
       const o=c.start+i*4; const op=v.getUint16(o,true);
       const amount = (op===43||op===44) ? {lo:v.getUint8(o+2), hi:v.getUint8(o+3)} : v.getInt16(o+2,true);
       out.push({op,amount});
+    }
+    return out;
+  }
+  _readMod(c){
+    if(!c) return [];
+    const v=this.view,n=c.size/10,out=[];
+    for(let i=0;i<n;i++){
+      const o=c.start+i*10;
+      out.push({src:v.getUint16(o,true),dest:v.getUint16(o+2,true),amount:v.getInt16(o+4,true),amtSrc:v.getUint16(o+6,true),trans:v.getUint16(o+8,true)});
     }
     return out;
   }
@@ -4174,21 +4280,25 @@ class SF2 {
   }
 }
 function sf2SplitGlobal(zones, terminalOp){
-  if(zones.length && !(terminalOp in zones[0])) return {global:zones[0], specific:zones.slice(1)};
+  if(zones.length && !(terminalOp in (zones[0].gens||zones[0]))) return {global:zones[0], specific:zones.slice(1)};
   return {global:null, specific:zones};
 }
-function sf2ZoneMatches(gens, note, vel){
-  const kr=gens[43], vr=gens[44];
+function sf2ZoneGens(z){ return z && z.gens ? z.gens : (z||{}); }
+function sf2ZoneMods(z){ return z && z.mods ? z.mods : []; }
+function sf2ZoneMatches(zone, note, vel){
+  const gens=sf2ZoneGens(zone), kr=gens[43], vr=gens[44];
   if(kr && (note<kr.lo || note>kr.hi)) return false;
   if(vr && (vel<vr.lo || vel>vr.hi)) return false;
   return true;
 }
-function sf2Merge(global, specific){ return Object.assign({}, global||{}, specific); }
+function sf2Merge(global, specific){ return Object.assign({}, sf2ZoneGens(global), sf2ZoneGens(specific)); }
+function sf2MergeMods(global, specific){ return [...sf2ZoneMods(global),...sf2ZoneMods(specific)]; }
 function sf2VoiceParams(preset, note, vel){
   const {global:pG, specific:pZ} = sf2SplitGlobal(preset.zones, 41);
   const pZone = pZ.find(z=>sf2ZoneMatches(z,note,vel)) || pZ[0];
   if(!pZone) return null;
   const presetGens = sf2Merge(pG,pZone);
+  const presetMods = sf2MergeMods(pG,pZone);
   const instIdx = presetGens[41];
   if(instIdx===undefined || !sf2.instruments[instIdx]) return null;
   const inst = sf2.instruments[instIdx];
@@ -4196,26 +4306,26 @@ function sf2VoiceParams(preset, note, vel){
   const iZone = iZ.find(z=>sf2ZoneMatches(z,note,vel)) || iZ[0];
   if(!iZone) return null;
   const instGens = sf2Merge(iG,iZone);
+  const instMods = sf2MergeMods(iG,iZone);
   const sampleIdx = instGens[53];
   if(sampleIdx===undefined || !sf2.samples[sampleIdx]) return null;
-  return {instGens, presetGens, sample: sf2.samples[sampleIdx]};
+  return {instGens, presetGens, mods:[...presetMods,...instMods], sample: sf2.samples[sampleIdx]};
 }
 function sf2ComputeParams(instGens, presetGens){
   const tc2s = tc => Math.pow(2, tc/1200);
   const add = (op,def) => (instGens[op]!==undefined?instGens[op]:def) + (presetGens[op]!==undefined?presetGens[op]:0);
   return {
     pan: add(17,0)/500,
-    attenuationCb: add(48,0),
-    coarseTune: add(51,0),
-    fineTune: add(52,0),
-    sampleModes: instGens[54]!==undefined?instGens[54]:0,
-    overridingRootKey: instGens[58]!==undefined?instGens[58]:-1,
-    delay: tc2s(add(33,-12000)),
-    attack: tc2s(add(34,-12000)),
-    hold: tc2s(add(35,-12000)),
-    decay: tc2s(add(36,-12000)),
-    sustainCb: add(37,0),
-    release: tc2s(add(38,-12000)),
+    attenuationCb: add(48,0), coarseTune:add(51,0), fineTune:add(52,0),
+    sampleModes:instGens[54]!==undefined?instGens[54]:0, overridingRootKey:instGens[58]!==undefined?instGens[58]:-1,
+    delay:tc2s(add(33,-12000)), attack:tc2s(add(34,-12000)), hold:tc2s(add(35,-12000)), decay:tc2s(add(36,-12000)),
+    sustainCb:add(37,0), release:tc2s(add(38,-12000)),
+    filterFc:add(8,13500), filterQ:add(9,0),
+    modLfoToPitch:add(5,0), vibLfoToPitch:add(6,0), modEnvToPitch:add(7,0),
+    modLfoToFilter:add(10,0), modEnvToFilter:add(11,0), modLfoToVolume:add(13,0),
+    delayModLfo:tc2s(add(21,-12000)), freqModLfo:8.176*Math.pow(2,add(22,0)/1200),
+    delayVibLfo:tc2s(add(23,-12000)), freqVibLfo:8.176*Math.pow(2,add(24,0)/1200),
+    keyVolHold:add(39,0), keyVolDecay:add(40,0)
   };
 }
 function sf2GetAudioBuffer(sample){
