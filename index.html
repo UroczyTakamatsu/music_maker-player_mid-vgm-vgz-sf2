@@ -152,6 +152,9 @@
 
   input[type=text]{background:#000;border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:8px;width:100%;font-size:15px;}
 </style>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#14161b">
+<meta name="mobile-web-app-capable" content="yes">
 </head>
 <body>
 <div id="app">
@@ -4702,6 +4705,13 @@ function init(){
   updatePitchOverlayInteractivity();
 }
 window.addEventListener('load', init);
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(console.error);
+  });
+}
 </script>
 </body>
 </html>
