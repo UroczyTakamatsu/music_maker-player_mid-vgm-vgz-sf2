@@ -2746,15 +2746,23 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
 
      The important architectural change remains the same: no Web Audio node is
      created per note. Each note is mixed directly into the final PCM buffers.
-     SF2 stays on the legacy renderer for now.
+     The default GM SF2 is shared directly as PCM; only explicit custom SF2 tracks
+     remain on the legacy path.
   */
   const sf2Used=song.tracks.some(tr=>tr.instrumentType==='sf2');
   if(sf2Used) return null;
   if(!actx) ensureAudio();
-  const needsPianoSf2=song.tracks.some(tr=>tr.instrumentType==='preset' && tr.instrument>=0 && tr.instrument<8 && tr.notes.length);
-  if(needsPianoSf2 && !sf2Ready){
-    setExportProgress('ピアノ音源を準備中...',.01);
-    await waitForSf2Ready();
+  // The default GM bank in the original app is the cached TimGM6mb SF2.
+  // For the low-level renderer we load that same bank once, then read its
+  // Int16 sample data directly instead of creating an AudioBufferSourceNode
+  // for every note. This preserves the original GM timbres while keeping
+  // the renderer's low-node-count architecture.
+  const needsDefaultSf2=song.tracks.some(tr=>tr.instrumentType==='preset' && tr.instrument>=0 && tr.instrument<128 && tr.notes.length);
+  if(needsDefaultSf2 && !sf2Ready){
+    setExportProgress('GM音源を準備中...',.01);
+    if(!(await waitForSf2Ready())){
+      setExportProgress('GM音源を取得できないため内蔵音源で続行...',.02);
+    }
   }
 
   const cfg=buildLowLevelRenderConfig(totalSeconds,sampleRate,leadSeconds);
@@ -3094,10 +3102,11 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
       const pitch=440*Math.pow(2,(n.p-69)/12);
       const kind=tr.type;
 
-      // GM piano presets use the actual SF2 piano sample in the low-level mixer.
-      // This keeps the fast PCM renderer while restoring the intended piano timbre.
-      if(kind>=2 && kind!==4 && tr.type===2 && tr.instrument>=0 && tr.instrument<8 && sf2Ready){
-        const program=tr.instrument;
+      // Default GM preset: use the SAME cached SF2 bank as the original app,
+      // but mix its PCM samples directly. No AudioBufferSourceNode is created
+      // for the note, and the SF2 sample data remains shared in memory.
+      if(kind===2 && tr.instrument>=0 && tr.instrument<128 && sf2Ready){
+        const program=tr.instrument|0;
         const preset=sf2.findPreset(0,program);
         const vp=preset ? sf2VoiceParams(preset,n.p,vel) : null;
         if(vp){
@@ -3111,47 +3120,58 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           const sustain=Math.max(.0001,peak*Math.pow(10,-params.sustainCb/200));
           const t0=Math.max(0,params.delay);
           const atk=Math.max(.001,params.attack), hold=Math.max(0,params.hold), dec=Math.max(.001,params.decay);
-          const rel=Math.min(.6,Math.max(.08,params.release));
+          const rel=Math.min(1.2,Math.max(.03,params.release));
           const peakTime=t0+atk, holdEnd=peakTime+hold, decEnd=holdEnd+dec;
           const looped=params.sampleModes===1 || params.sampleModes===3;
           const loopStart=Math.max(0,sample.startLoop-sample.start);
-          const loopEnd=Math.max(loopStart+1,sample.endLoop-sample.start);
+          const loopEnd=Math.max(loopStart+1,Math.min(sampleLen,sample.endLoop-sample.start));
+          const samplePan=Math.max(-1,Math.min(1,params.pan));
+          const totalPan=Math.max(-1,Math.min(1,(tr.pan||0)/100 + samplePan));
+          const pa=(totalPan+1)*Math.PI/4;
+          const notePanL=Math.cos(pa)*tr.gain;
+          const notePanR=Math.sin(pa)*tr.gain;
           let srcPos=0;
           for(let fr=start;fr<end;fr++){
             const age=(fr-start)/sr;
             const pm=pitchMulAt(n,age);
             const rate=baseRate*pm*(sample.sampleRate||44100)/sr;
-            if(age<t0) srcPos+=rate;
-            else {
-              if(looped && srcPos>=loopEnd){
-                const span=Math.max(1,loopEnd-loopStart);
-                srcPos=loopStart+((srcPos-loopStart)%span);
-              }
-              const si=Math.floor(srcPos);
-              const frac=srcPos-si;
-              let smp=0;
-              if(si>=0 && si<sampleLen){
-                const a=(src[sample.start+si]||0)/32768;
-                const b=(src[sample.start+Math.min(si+1,sampleLen-1)]||0)/32768;
-                smp=a+(b-a)*frac;
-              } else if(looped && si>=loopStart){
-                const span=Math.max(1,loopEnd-loopStart);
-                const wrapped=loopStart+((si-loopStart)%span);
-                const a=(src[sample.start+wrapped]||0)/32768;
-                smp=a;
-              }
-              srcPos+=rate;
-              let e=0;
-              if(age<t0) e=0;
-              else if(age<peakTime) e=peak*(age-t0)/atk;
-              else if(age<holdEnd) e=peak;
-              else if(age<decEnd) e=peak+(sustain-peak)*((age-holdEnd)/dec);
-              else if(age<dur) e=sustain;
-              else if(age<dur+rel) e=sustain*Math.pow(.0001/Math.max(.0001,sustain),(age-dur)/rel);
-              else e=0;
-              const x=smp*e;
-              addSample(fr,x,panL,panR);
+            if(age<t0) { srcPos+=rate; continue; }
+            if(looped && srcPos>=loopEnd){
+              const span=Math.max(1,loopEnd-loopStart);
+              srcPos=loopStart+((srcPos-loopStart)%span);
             }
+            const si=Math.floor(srcPos);
+            const frac=srcPos-si;
+            let smp=0;
+            if(si>=0 && si<sampleLen){
+              const a=(src[sample.start+si]||0)/32768;
+              const b=(src[sample.start+Math.min(si+1,sampleLen-1)]||0)/32768;
+              smp=a+(b-a)*frac;
+            }else if(looped && si>=loopStart){
+              const span=Math.max(1,loopEnd-loopStart);
+              const wrapped=loopStart+((si-loopStart)%span);
+              const a=(src[sample.start+wrapped]||0)/32768;
+              const b=(src[sample.start+Math.min(wrapped+1,loopEnd-1)]||0)/32768;
+              smp=a+(b-a)*frac;
+            }
+            srcPos+=rate;
+            let e=0;
+            if(age<peakTime) e=peak*(age-t0)/atk;
+            else if(age<holdEnd) e=peak;
+            else if(age<decEnd) e=peak+(sustain-peak)*((age-holdEnd)/dec);
+            else if(age<dur) e=sustain;
+            else if(age<dur+rel) e=sustain*Math.pow(.0001/Math.max(.0001,sustain),(age-dur)/rel);
+            const x=smp*e;
+            addSample(fr,x,notePanL,notePanR);
+          }
+        } else {
+          // A malformed/missing SF2 zone falls through to the procedural GM engine.
+          let phase=0;
+          const program=tr.instrument|0;
+          for(let fr=start;fr<end;fr++){
+            const age=(fr-start)/sr, pm=pitchMulAt(n,age);
+            phase=(phase+2*Math.PI*pitch*pm/sr)%(2*Math.PI);
+            addSample(fr,gmTimbre(program,phase,pitch*pm,age,dur,vel)*gmEnvelope(program,age,dur,vel),panL,panR);
           }
         }
       }else if(kind===6){
