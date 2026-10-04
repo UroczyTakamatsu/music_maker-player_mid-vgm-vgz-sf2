@@ -1,4 +1,4 @@
-const CACHE_NAME = "midsequer2-pwa-v4";
+const CACHE_NAME = "midsequer2-pwa-v2";
 const APP_SHELL = ["./", "./index.html", "./icon.svg"];
 
 self.addEventListener("install", event => {
