@@ -3109,11 +3109,15 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         const isDrum=tr.instrument===-1;
         const program=isDrum?0:(tr.instrument|0);
         const preset=sf2.findPreset(isDrum?128:0,program);
-        const vp=preset ? sf2VoiceParams(preset,n.p,vel) : null;
-        if(vp){
+        const vps=preset ? sf2VoiceParamsAll(preset,n.p,vel) : [];
+        if(vps.length){
+          for(const vp of vps){
           const params=sf2ComputeParams(vp.instGens,vp.presetGens);
           const sample=vp.sample, src=sf2.sampleData;
-          const sampleLen=Math.max(1,sample.end-sample.start);
+          const g=vp.instGens||{};
+          const sampleStart=Math.max(0, sample.start + (g[0]||0) + (g[4]||0)*32768);
+          const sampleEnd=Math.min(sf2.sampleData.length, sample.end + (g[1]||0) + (g[50]||0)*32768);
+          const sampleLen=Math.max(1,sampleEnd-sampleStart);
           const rootKey=params.overridingRootKey>=0 ? params.overridingRootKey : sample.originalPitch;
 
           // SF2 modulators. We implement the note-static sources that matter most
@@ -3167,8 +3171,8 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           const peakTime=delay+attack, holdEnd=peakTime+hold, decEnd=holdEnd+decay;
 
           const looped=params.sampleModes===1 || params.sampleModes===3;
-          const loopStart=Math.max(0,sample.startLoop-sample.start);
-          const loopEnd=Math.max(loopStart+2,Math.min(sampleLen,sample.endLoop-sample.start));
+          const loopStart=Math.max(0,(sample.startLoop + (g[2]||0) + (g[45]||0)*32768)-sampleStart);
+          const loopEnd=Math.max(loopStart+2,Math.min(sampleLen,(sample.endLoop + (g[3]||0) + (g[50]||0)*32768)-sampleStart));
           const samplePan=Math.max(-1,Math.min(1,params.pan));
           const totalPan=Math.max(-1,Math.min(1,(tr.pan||0)/100+samplePan));
           const pa=(totalPan+1)*Math.PI/4;
@@ -3207,7 +3211,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
                 if(q>=loopEnd){ const span=loopEnd-loopStart; q=loopStart+((q-loopStart)%span); }
               }
               q=Math.max(0,Math.min(sampleLen-1,q));
-              return (src[sample.start+q]||0)/32768;
+              return (src[sampleStart+q]||0)/32768;
             };
             // 4-point Hermite interpolation: noticeably cleaner pitch shifting
             // than linear interpolation, especially for high notes.
@@ -3254,6 +3258,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
             }
             const x=smp*e;
             addSample(fr,x,notePanL,notePanR);
+          }
           }
         } else {
           // A malformed/missing SF2 zone falls through to the procedural GM engine.
@@ -4309,23 +4314,56 @@ function sf2ZoneMatches(zone, note, vel){
 }
 function sf2Merge(global, specific){ return Object.assign({}, sf2ZoneGens(global), sf2ZoneGens(specific)); }
 function sf2MergeMods(global, specific){ return [...sf2ZoneMods(global),...sf2ZoneMods(specific)]; }
+function sf2ResolveRanges(a,b){
+  const ka=a&&a[43], kb=b&&b[43], va=a&&a[44], vb=b&&b[44];
+  const klo=Math.max(ka?ka.lo:0,kb?kb.lo:0), khi=Math.min(ka?ka.hi:127,kb?kb.hi:127);
+  const vlo=Math.max(va?va.lo:0,vb?vb.lo:0), vhi=Math.min(va?va.hi:127,vb?vb.hi:127);
+  return {klo,khi,vlo,vhi,ok:klo<=khi&&vlo<=vhi};
+}
+function sf2CombineGenerators(instGlobal, instZone, presetGlobal, presetZone){
+  // SF2 2.04: instrument generators establish absolute values; preset
+  // generators are additive offsets. Key/velocity ranges are handled by
+  // intersection, and resource indices (instrument/sampleID) are selectors.
+  const ig=sf2ZoneGens(instGlobal), iz=sf2ZoneGens(instZone), pg=sf2ZoneGens(presetGlobal), pz=sf2ZoneGens(presetZone);
+  const out={};
+  const keys=new Set([...Object.keys(ig),...Object.keys(iz),...Object.keys(pg),...Object.keys(pz)].map(Number));
+  for(const op of keys){
+    if(op===41 || op===53 || op===43 || op===44) continue;
+    let iv;
+    if(iz[op]!==undefined) iv=iz[op]; else if(ig[op]!==undefined) iv=ig[op]; else iv=0;
+    let pv=(pz[op]!==undefined?pz[op]:(pg[op]!==undefined?pg[op]:0));
+    out[op]=iv+pv;
+  }
+  if(iz[53]!==undefined) out[53]=iz[53];
+  const r=sf2ResolveRanges(sf2ZoneGens(instZone),sf2ZoneGens(presetZone));
+  out[43]={lo:r.klo,hi:r.khi}; out[44]={lo:r.vlo,hi:r.vhi};
+  return out;
+}
+function sf2VoiceParamsAll(preset, note, vel){
+  const ps=sf2SplitGlobal(preset.zones,41);
+  const voices=[];
+  for(const pZone of ps.specific){
+    if(!sf2ZoneMatches(pZone,note,vel)) continue;
+    const pG=sf2ZoneGens(ps.global), pZ=sf2ZoneGens(pZone);
+    const instIdx=(pZ[41]!==undefined?pZ[41]:pG[41]);
+    if(instIdx===undefined || !sf2.instruments[instIdx]) continue;
+    const inst=sf2.instruments[instIdx], is=sf2SplitGlobal(inst.zones,53);
+    for(const iZone of is.specific){
+      if(!sf2ZoneMatches(iZone,note,vel)) continue;
+      const iG=sf2ZoneGens(is.global), iZ=sf2ZoneGens(iZone);
+      const sampleIdx=iZ[53];
+      if(sampleIdx===undefined || !sf2.samples[sampleIdx]) continue;
+      const ranges=sf2ResolveRanges(iZ,pZ);
+      if(note<ranges.klo||note>ranges.khi||vel<ranges.vlo||vel>ranges.vhi) continue;
+      const gens=sf2CombineGenerators(is.global,iZone,ps.global,pZone);
+      voices.push({instGens:gens,presetGens:{},mods:[...sf2ZoneMods(ps.global),...sf2ZoneMods(pZone),...sf2ZoneMods(is.global),...sf2ZoneMods(iZone)],sample:sf2.samples[sampleIdx]});
+    }
+  }
+  return voices;
+}
 function sf2VoiceParams(preset, note, vel){
-  const {global:pG, specific:pZ} = sf2SplitGlobal(preset.zones, 41);
-  const pZone = pZ.find(z=>sf2ZoneMatches(z,note,vel)) || pZ[0];
-  if(!pZone) return null;
-  const presetGens = sf2Merge(pG,pZone);
-  const presetMods = sf2MergeMods(pG,pZone);
-  const instIdx = presetGens[41];
-  if(instIdx===undefined || !sf2.instruments[instIdx]) return null;
-  const inst = sf2.instruments[instIdx];
-  const {global:iG, specific:iZ} = sf2SplitGlobal(inst.zones, 53);
-  const iZone = iZ.find(z=>sf2ZoneMatches(z,note,vel)) || iZ[0];
-  if(!iZone) return null;
-  const instGens = sf2Merge(iG,iZone);
-  const instMods = sf2MergeMods(iG,iZone);
-  const sampleIdx = instGens[53];
-  if(sampleIdx===undefined || !sf2.samples[sampleIdx]) return null;
-  return {instGens, presetGens, mods:[...presetMods,...instMods], sample: sf2.samples[sampleIdx]};
+  const all=sf2VoiceParamsAll(preset,note,vel);
+  return all.length?all[0]:null;
 }
 function sf2ComputeParams(instGens, presetGens){
   const tc2s = tc => Math.pow(2, tc/1200);
