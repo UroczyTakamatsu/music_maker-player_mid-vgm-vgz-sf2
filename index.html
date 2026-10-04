@@ -4274,10 +4274,25 @@ class SF2 {
     return out;
   }
   findPreset(bank, program){
-    return this.presets.find(p=>p.bank===bank && p.preset===program)
-        || this.presets.find(p=>p.bank===128 && p.preset===program)
-        || this.presets.find(p=>p.preset===program)
-        || null;
+    // GM melodic presets must come from bank 0.  Do NOT fall through to
+    // percussion bank 128: a missing exact match must never silently turn
+    // one GM program into another preset.
+    const exact=this.presets.find(p=>p.bank===bank && p.preset===program);
+    if(exact) return exact;
+    if(bank===128){
+      return this.presets.find(p=>p.bank===128 && p.preset===program) || null;
+    }
+    // Some SF2 files have non-standard/renumbered preset headers.  For the
+    // default GM bank, use the GM program name as a final verification key.
+    const gmName=(typeof GM_INSTRUMENTS!=='undefined' && GM_INSTRUMENTS[program]) ? GM_INSTRUMENTS[program] : '';
+    if(gmName){
+      const norm=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+      const target=norm(gmName);
+      const byName=this.presets.find(p=>p.bank===0 && norm(p.name)===target)
+        || this.presets.find(p=>p.bank===0 && norm(p.name).includes(target));
+      if(byName) return byName;
+    }
+    return null;
   }
 }
 function sf2SplitGlobal(zones, terminalOp){
