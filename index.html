@@ -2713,6 +2713,10 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
       const endTick=effectiveNoteEndTick(ti,nt);
       const when=leadSeconds+tickToSeconds(nt.startTick);
       const dur=Math.max(.01,tickSpanSeconds(nt.startTick,endTick));
+      // `d` is the musical note-off position.  SF2's live voice keeps the
+      // sample source alive for the same fixed 300 ms release used by
+      // sf2Voice(), so the low-level renderer extends the PCM work separately
+      // when it mixes an SF2 voice.
       const n={s:Math.floor(when*sampleRate),d:Math.floor((when+dur)*sampleRate),len:dur,p:nt.pitch,v:nt.velocity??100};
       if(nt.pitchCurve&&nt.pitchCurve.length>=2) n.c=nt.pitchCurve.map(pt=>[pt.t*dur,pt.semi]);
       const vib=resolveVibratoHz(nt.vibrato,nt.startTick);
@@ -3109,156 +3113,120 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         const isDrum=tr.instrument===-1;
         const program=isDrum?0:(tr.instrument|0);
         const preset=sf2.findPreset(isDrum?128:0,program);
-        const vps=preset ? sf2VoiceParamsAll(preset,n.p,vel) : [];
-        if(vps.length){
-          for(const vp of vps){
+
+        // IMPORTANT: live playback intentionally resolves ONE SF2 voice.
+        // The old fast renderer used sf2VoiceParamsAll(), which stacked every
+        // matching zone.  That is valid for a full SF2 engine, but it did not
+        // match this app's editor/playback implementation (sf2Voice()).
+        // Keeping this exact resolver also fixes velocity/key-layered patches
+        // that sounded radically different after export.
+        const vp=preset ? sf2VoiceParams(preset,n.p,vel) : null;
+        if(vp){
           const params=sf2ComputeParams(vp.instGens,vp.presetGens);
           const sample=vp.sample, src=sf2.sampleData;
-          const g=vp.instGens||{};
-          const sampleStart=Math.max(0, sample.start + (g[0]||0) + (g[4]||0)*32768);
-          const sampleEnd=Math.min(sf2.sampleData.length, sample.end + (g[1]||0) + (g[50]||0)*32768);
+          const sampleStart=Math.max(0,sample.start);
+          const sampleEnd=Math.min(sf2.sampleData.length,sample.end);
           const sampleLen=Math.max(1,sampleEnd-sampleStart);
           const rootKey=params.overridingRootKey>=0 ? params.overridingRootKey : sample.originalPitch;
 
-          // SF2 modulators. We implement the note-static sources that matter most
-          // during offline rendering (velocity, key, pitch wheel), plus their
-          // standard destinations. Channel controllers are intentionally left at
-          // their neutral value because a MIDI note in this renderer does not carry
-          // a controller snapshot.
-          const modSrcValue=(srcOper)=>{
-            const idx=srcOper&0x7f;
-            let v=0;
-            if(idx===2) v=Math.max(0,Math.min(1,vel/127));       // note-on velocity
-            else if(idx===3) v=Math.max(0,Math.min(1,n.p/127)); // key number
-            else if(idx===14) v=.5;                            // pitch wheel center
-            else v=0;
-            if(srcOper&0x200) v=1-v; // polarity: negative
-            if(srcOper&0x100) v=-v;  // direction
-            return v;
-          };
-          // Parsed SF2 modulators are intentionally applied conservatively here.
-          // Full SF2 source transforms (concave/convex/switch/bipolar/direction) are
-          // easy to misinterpret; an incorrect attenuation mod can make valid notes
-          // effectively silent. Velocity is already handled explicitly below, so we
-          // do not add generic modulator attenuation until the full transform matrix
-          // is implemented. Pitch/filter destinations are retained with hard safety
-          // caps so malformed/unusual fonts cannot destroy note audibility.
-          let modAtt=0, modPitch=0, modFilter=0;
-          for(const m of (vp.mods||[])){
-            const sv=modSrcValue(m.src);
-            if(!Number.isFinite(sv) || !Number.isFinite(m.amount)) continue;
-            const av=sv*m.amount;
-            if(m.dest===5 || m.dest===6 || m.dest===7) modPitch+=Math.max(-50,Math.min(50,av));
-            else if(m.dest===8 || m.dest===10 || m.dest===11) modFilter+=Math.max(-1200,Math.min(1200,av));
-          }
-          modPitch=Math.max(-100,Math.min(100,modPitch));
-          modFilter=Math.max(-2400,Math.min(2400,modFilter));
-
+          // Match sf2Voice() exactly: its AudioBuffer contains the raw
+          // sample.start..sample.end region, without generator address offsets.
+          // Its AudioBufferSource is then driven only by the base pitch,
+          // pitch-curve and vibrato.  SF2 modulators/filter/pan are NOT applied
+          // by the editor voice, so the low-level renderer must not add them.
           const semisBase=(n.p-rootKey)+params.coarseTune+params.fineTune/100+(sample.pitchCorrection||0)/100;
           const baseRate=Math.pow(2,semisBase/12);
-          const peak=Math.pow(10,-(params.attenuationCb+modAtt)/200)*Math.max(.015,vel/127);
-          const sustain=Math.max(.00001,peak*Math.pow(10,-params.sustainCb/200));
+          const peak=Math.pow(10,-params.attenuationCb/200)*Math.max(.05,vel/127);
+          const sustain=Math.max(.0001,peak*Math.pow(10,-params.sustainCb/200));
+          const delay=Math.max(0,params.delay);
+          const attack=Math.max(.001,params.attack);
+          const hold=Math.max(0,params.hold);
+          const decay=Math.max(.001,params.decay);
+          const REL=.3;
+          const noteOff=dur;
+          const peakTime=delay+attack;
+          const holdEnd=peakTime+hold;
+          const decEnd=holdEnd+decay;
 
-          // SF2 key scaling for volume-envelope hold/decay. Values are
-          // timecents-per-key around MIDI key 60.
-          const keyDelta=n.p-60;
-          const tc2s=tc=>Math.pow(2,tc/1200);
-          const delay=Math.max(0,Math.min(2,params.delay));
-          const attack=Math.max(.0005,Math.min(10,params.attack));
-          const hold=Math.max(0,Math.min(10,params.hold*tc2s(-params.keyVolHold*keyDelta)));
-          const decay=Math.max(.0005,Math.min(20,params.decay*tc2s(-params.keyVolDecay*keyDelta)));
-          const rel=Math.max(.005,Math.min(20,params.release));
-          const peakTime=delay+attack, holdEnd=peakTime+hold, decEnd=holdEnd+decay;
+          // Editor playback ignores SF2 pan and lets the track node provide
+          // the only pan stage.  Use the same equal-power track pan here.
+          const totalPan=Math.max(-1,Math.min(1,(tr.pan||0)/100));
+          const pa=(totalPan+1)*Math.PI/4;
+          const notePanL=Math.cos(pa)*tr.gain;
+          const notePanR=Math.sin(pa)*tr.gain;
 
           const looped=params.sampleModes===1 || params.sampleModes===3;
-          const loopStart=Math.max(0,(sample.startLoop + (g[2]||0) + (g[45]||0)*32768)-sampleStart);
-          const loopEnd=Math.max(loopStart+2,Math.min(sampleLen,(sample.endLoop + (g[3]||0) + (g[50]||0)*32768)-sampleStart));
-          const samplePan=Math.max(-1,Math.min(1,params.pan));
-          const totalPan=Math.max(-1,Math.min(1,(tr.pan||0)/100+samplePan));
-          const pa=(totalPan+1)*Math.PI/4;
-          const notePanL=Math.cos(pa)*tr.gain, notePanR=Math.sin(pa)*tr.gain;
+          const loopStart=Math.max(0,Math.min(sampleLen-1,sample.startLoop-sample.start));
+          const loopEnd=Math.max(loopStart+1,Math.min(sampleLen,sample.endLoop-sample.start));
+          const sampleRateIn=sample.sampleRate||44100;
+          const rateScale=sampleRateIn/sr;
 
-          // RBJ low-pass filter. SF2 initialFilterFc is in cents and Q is 0.1 dB.
-          // Coefficients are refreshed periodically when an envelope/LFO changes
-          // the cutoff; this avoids a per-sample coefficient calculation.
-          let fx1=0,fx2=0,fy1=0,fy2=0, fLast=-1, qLast=-1;
-          let b0=1,b1=0,b2=0,a1=0,a2=0,filterOn=(vp.instGens[8]!==undefined || vp.presetGens[8]!==undefined);
-          const setFilter=(cutoff,q)=>{
-            const fc=Math.max(20,Math.min(sr*.47,cutoff));
-            const qq=Math.max(.25,Math.min(18,q));
-            if(Math.abs(fc-fLast)<.25 && Math.abs(qq-qLast)<.01) return;
-            fLast=fc; qLast=qq;
-            const w0=2*Math.PI*fc/sr, c=Math.cos(w0), s=Math.sin(w0);
-            const alpha=s/(2*qq);
-            const aa0=1+alpha;
-            b0=(1-c)/2/aa0; b1=(1-c)/aa0; b2=b0;
-            a1=(-2*c)/aa0; a2=(1-alpha)/aa0;
-            filterOn=fc<sr*.46;
-          };
-
+          // WebAudio's BufferSource interpolation is intentionally left to the
+          // browser in live playback.  Linear interpolation is a conservative
+          // PCM equivalent for export and avoids the extra high-frequency
+          // emphasis the old Hermite interpolator introduced on some patches.
           let srcPos=0;
-          const interp4=(pos)=>{
-            let i=Math.floor(pos), f=pos-i;
+          const sampleAt=(pos)=>{
+            if(!looped && pos>=sampleLen) return 0;
+            let p=pos;
             if(looped){
-              if(i<0) i=0;
-              if(i>=loopEnd){ const span=loopEnd-loopStart; i=loopStart+((i-loopStart)%span); }
+              const span=Math.max(1,loopEnd-loopStart);
+              if(p>=loopEnd) p=loopStart+((p-loopStart)%span);
+              if(p<0) p=loopStart;
             }
-            const idx=i;
-            const at=k=>{
-              let q=k;
-              if(looped){
-                if(q<loopStart) q=loopStart;
-                if(q>=loopEnd){ const span=loopEnd-loopStart; q=loopStart+((q-loopStart)%span); }
-              }
-              q=Math.max(0,Math.min(sampleLen-1,q));
-              return (src[sampleStart+q]||0)/32768;
-            };
-            // 4-point Hermite interpolation: noticeably cleaner pitch shifting
-            // than linear interpolation, especially for high notes.
-            const y0=at(idx-1), y1=at(idx), y2=at(idx+1), y3=at(idx+2);
-            const c0=y1, c1=.5*(y2-y0), c2=y0-2.5*y1+2*y2-.5*y3, c3=.5*(y3-y0)+1.5*(y1-y2);
-            return ((c3*f+c2)*f+c1)*f+c0;
+            const i=Math.floor(p);
+            const f=p-i;
+            const i0=Math.max(0,Math.min(sampleLen-1,i));
+            const i1=Math.max(0,Math.min(sampleLen-1,i+1));
+            const a=(src[sampleStart+i0]||0)/32768;
+            const b=(src[sampleStart+i1]||0)/32768;
+            return a+(b-a)*f;
           };
 
-          for(let fr=start;fr<end;fr++){
-            const age=(fr-start)/sr;
-            if(age<delay){ srcPos += baseRate*(sample.sampleRate||44100)/sr; continue; }
-            const pm0=pitchMulAt(n,age);
-            // SF2 LFO/envelope pitch contributions are expressed in cents.
-            const modLfo=age>=params.delayModLfo ? Math.sin(2*Math.PI*params.freqModLfo*(age-params.delayModLfo)) : 0;
-            const vibLfo=age>=params.delayVibLfo ? Math.sin(2*Math.PI*params.freqVibLfo*(age-params.delayVibLfo)) : 0;
-            const envNorm=age<peakTime ? 0 : age<holdEnd ? 1 : age<decEnd ? 1-(age-holdEnd)/Math.max(.0005,decay) : age<dur ? 0 : 0;
-            const pitchCents=modPitch + params.modLfoToPitch*modLfo + params.vibLfoToPitch*vibLfo + params.modEnvToPitch*envNorm;
-            const rate=baseRate*pm0*Math.pow(2,pitchCents/1200)*(sample.sampleRate||44100)/sr;
-            if(looped && srcPos>=loopEnd){ const span=Math.max(1,loopEnd-loopStart); srcPos=loopStart+((srcPos-loopStart)%span); }
-            let smp=interp4(srcPos);
-            srcPos+=rate;
-
-            // SF2 volume envelope with key scaling and a release derived from the
-            // actual patch instead of the old fixed 300 ms fade.
-            let e=0;
-            if(age<delay) e=0;
-            else if(age<peakTime) e=peak*(age-delay)/attack;
-            else if(age<holdEnd) e=peak;
-            else if(age<decEnd) e=peak+(sustain-peak)*((age-holdEnd)/decay);
-            else if(age<dur) e=sustain;
-            else if(age<dur+rel) e=sustain*Math.pow(.0001/Math.max(.00001,sustain),(age-dur)/rel);
-            else e=0;
-
-            // Filter cutoff in cents. Mod LFO/env destinations are additive in cents.
-            let envFilter=0;
-            if(age>=peakTime && age<decEnd) envFilter=1-(age-holdEnd)/Math.max(.0005,decay);
-            if(filterOn){
-              const filterCents=params.filterFc + modFilter + params.modLfoToFilter*modLfo + params.modEnvToFilter*envFilter;
-              const cutoff=8.176*Math.pow(2,filterCents/1200);
-              const q=.707*Math.pow(10,params.filterQ/200);
-              setFilter(cutoff,q);
-              const y=b0*smp+b1*fx1+b2*fx2-a1*fy1-a2*fy2;
-              fx2=fx1; fx1=smp; fy2=fy1; fy1=y; smp=y;
+          // This is the same gain schedule as sf2Voice().  In particular,
+          // note-off can happen during delay/attack/hold/decay; the release
+          // therefore starts from the gain at the actual note-off point rather
+          // than always starting from sustain.
+          const gainBeforeRelease=(age)=>{
+            if(age<=delay) return 0;
+            if(age<=peakTime) return Math.max(.0001,peak*(age-delay)/attack);
+            if(age<=holdEnd) return Math.max(.0001,peak);
+            if(age<=decEnd){
+              const frac=(age-holdEnd)/decay;
+              return Math.max(.0001,peak+(sustain-peak)*frac);
             }
-            const x=smp*e;
-            addSample(fr,x,notePanL,notePanR);
-          }
+            return Math.max(.0001,sustain);
+          };
+          const releaseStartGain=gainBeforeRelease(noteOff);
+          const renderEndFrame=Math.min(totalFrames,
+            Math.ceil(start+ (dur+REL+.05)*sr));
+
+          for(let fr=start;fr<renderEndFrame;fr++){
+            const age=(fr-start)/sr;
+
+            // BufferSource playback starts immediately at `when`; the gain
+            // envelope, not the sample position, implements SF2 delay.
+            const pm0=pitchMulAt(n,age);
+            const rate=baseRate*pm0*rateScale;
+            let smp=sampleAt(srcPos);
+            srcPos+=rate;
+            if(looped && srcPos>=loopEnd){
+              const span=Math.max(1,loopEnd-loopStart);
+              srcPos=loopStart+((srcPos-loopStart)%span);
+            }
+
+            let e=0;
+            if(age<noteOff){
+              e=gainBeforeRelease(age);
+            }else if(age<noteOff+REL){
+              if(releaseStartGain<=.0001) e=.0001;
+              else e=releaseStartGain*Math.pow(.0001/releaseStartGain,
+                    (age-noteOff)/REL);
+            }else{
+              e=0;
+            }
+            if(age<delay) e=0;
+            addSample(fr,smp*e,notePanL,notePanR);
           }
         } else {
           // A malformed/missing SF2 zone falls through to the procedural GM engine.
