@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>MidSequer2+</title>
+<title>MIDI Music Maker</title>
 <style>
   :root{
     --bg-0:#14161b;
@@ -152,9 +152,6 @@
 
   input[type=text]{background:#000;border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:8px;width:100%;font-size:15px;}
 </style>
-<link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#14161b">
-<meta name="mobile-web-app-capable" content="yes">
 </head>
 <body>
 <div id="app">
@@ -819,6 +816,32 @@ function midiParseVLQ(view, pos){
   do{ byte=view.getUint8(pos++); value=(value<<7)|(byte&0x7f); } while(byte&0x80);
   return {value, pos};
 }
+
+/* Decode MIDI text from raw bytes.
+   MIDI files in the wild use UTF-8, Shift-JIS/CP932, and sometimes legacy
+   single-byte encodings. Prefer strict UTF-8, then Japanese Shift-JIS. */
+function decodeMidiText(bytes){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  try{
+    const s = new TextDecoder('utf-8', {fatal:true}).decode(arr).replace(/^\uFEFF/, '').trim();
+    if(s) return s;
+  }catch(_){}
+  try{
+    const s = new TextDecoder('shift_jis', {fatal:false}).decode(arr).replace(/^\uFEFF/, '').trim();
+    if(s) return s;
+  }catch(_){}
+  return Array.from(arr, b=>String.fromCharCode(b)).join('').replace(/^\uFEFF/, '').trim();
+}
+
+function normalizeImportedFilename(name){
+  let s = String(name||'').trim();
+  // Some Android file providers hand back a percent-encoded display name.
+  try{
+    if(/%[0-9A-Fa-f]{2}/.test(s)) s = decodeURIComponent(s);
+  }catch(_){}
+  return s;
+}
+
 function parseMidiFile(buf){
   const view = new DataView(buf);
   const fourcc = o => String.fromCharCode(view.getUint8(o),view.getUint8(o+1),view.getUint8(o+2),view.getUint8(o+3));
@@ -866,8 +889,8 @@ function parseMidiFile(buf){
           const num=view.getUint8(p), den=Math.pow(2,view.getUint8(p+1));
           rawTsEvents.push({tick: Math.round(absTick*scale), num, den});
         } else if((metaType===0x03 || metaType===0x01) && midiTitle===null && len.value>0){
-          let s=''; for(let i=0;i<len.value;i++) s+=String.fromCharCode(view.getUint8(p+i));
-          s = s.trim();
+          const bytes = new Uint8Array(buf, p, len.value);
+          const s = decodeMidiText(bytes);
           if(s) midiTitle = s;
         }
         p += len.value;
@@ -889,7 +912,7 @@ function parseMidiFile(buf){
               const st = Math.round(on.startTick*scale);
               const ln = Math.max(1, Math.round((absTick-on.startTick)*scale));
               const idx = format===0 ? (channel===9?9:Math.min(channel,15)) : Math.min(t,15);
-              result.tracks[idx].notes.push({id:noteIdSeq++, pitch, startTick:st, lengthTick:ln});
+              result.tracks[idx].notes.push({id:noteIdSeq++, pitch, startTick:st, lengthTick:ln, velocity:Math.max(0,Math.min(127,on.velocity??100))});
             }
           }
         } else if(eventType===0xC0){
@@ -1128,6 +1151,37 @@ function drawGrid(){
     ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); ctx.stroke();
   }
 
+  // While placing or dragging a note, make the whole note range visible
+  // instead of relying on the note itself (which can be hidden under a finger).
+  if(mode==='input' && notePlaceGuide){
+    const gy = noteToY(notePlaceGuide.pitch);
+    const gx0 = tickToX(notePlaceGuide.startTick);
+    const gx1 = tickToX(notePlaceGuide.endTick);
+    const top = Math.max(0, gy);
+    const bottom = Math.min(h, gy + rowH);
+    const left = Math.max(-2, gx0);
+    const right = Math.min(w + 2, gx1);
+
+    ctx.save();
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = 'rgba(226,162,79,.95)';
+    ctx.strokeStyle = 'rgba(255,210,145,.95)';
+    ctx.lineWidth = 2;
+
+    // Full-width horizontal row boundaries.
+    ctx.beginPath();
+    ctx.moveTo(0, top + .5); ctx.lineTo(w, top + .5);
+    ctx.moveTo(0, bottom - .5); ctx.lineTo(w, bottom - .5);
+    ctx.stroke();
+
+    // Full-height vertical column boundaries.
+    ctx.beginPath();
+    ctx.moveTo(left + .5, 0); ctx.lineTo(left + .5, h);
+    ctx.moveTo(right - .5, 0); ctx.lineTo(right - .5, h);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // ghost notes of other tracks
   if(otherTracksMode!=='off'){
     const fillStyle = otherTracksMode==='full' ? 'rgba(120,150,255,.42)' : 'rgba(120,150,255,.13)';
@@ -1244,6 +1298,7 @@ function drawAll(){
    ============================================================ */
 let longPressTimer=null;
 let dragNote=null;      // note being created via long-press
+let notePlaceGuide=null; // full-row/full-column guide shown while placing a note
 let selRect=null;       // rubber-band select rect (grid-canvas local px)
 let dragMoveInfo=null;  // moving selected notes
 let pointerDownInfo=null;
@@ -1255,8 +1310,8 @@ function floorTick(t){ const gt=gridTicks(); return Math.floor(t/gt)*gt; }
 
 gridCanvas.addEventListener('pointerdown', onGridDown);
 gridCanvas.addEventListener('pointermove', onGridMove);
-window.addEventListener('pointerup', onGridUp);
-window.addEventListener('pointercancel', onGridUp);
+window.addEventListener('pointerup', e=>{ if(pointerDownInfo) onGridUp(e); });
+window.addEventListener('pointercancel', e=>{ if(pointerDownInfo) onGridUp(e); });
 
 function localPos(e){
   const r = gridCanvas.getBoundingClientRect();
@@ -1265,10 +1320,11 @@ function localPos(e){
 
 function hitTestNote(tick,pitch){
   const tr = song.tracks[song.activeTrack];
-  const tolTicks = 7/view.pxPerTick; // ~7px of forgiveness in either direction, more at lower zoom
+  const tolTicks = 10/view.pxPerTick; // horizontal forgiveness: ~10px
+  const tolPitch = Math.max(1, Math.ceil(8/view.rowH)); // vertical forgiveness: ~8px, at least 1 semitone
   for(let i=tr.notes.length-1;i>=0;i--){
     const nt=tr.notes[i];
-    if(pitch===nt.pitch && tick>=nt.startTick-tolTicks && tick<nt.startTick+nt.lengthTick+tolTicks) return nt;
+    if(Math.abs(pitch-nt.pitch)<=tolPitch && tick>=nt.startTick-tolTicks && tick<nt.startTick+nt.lengthTick+tolTicks) return nt;
   }
   return null;
 }
@@ -1327,7 +1383,9 @@ function stopLivePreview(){
 }
 
 function onGridDown(e){
-  gridCanvas.setPointerCapture(e.pointerId);
+  e.preventDefault();
+  try{ gridCanvas.setPointerCapture(e.pointerId); }catch(_){}
+
   const p = localPos(e);
   const tick = xToTick(p.x);
   const pitch = yToNote(p.y);
@@ -1337,23 +1395,38 @@ function onGridDown(e){
   lastPointerPos = p;
   pointerDownInfo = {p, tick, pitch, hitNote, moved:false, t0:performance.now()};
 
+  if(!hitNote && mode==='input'){
+    const startTick = floorTick(tick);
+    const endTick = startTick + gridTicks();
+    notePlaceGuide = {startTick, endTick, pitch};
+    drawGrid();
+  }
+
   if(hitNote){
     const noteStartX = tickToX(hitNote.startTick);
     const noteWidthPx = hitNote.lengthTick*view.pxPerTick;
-    pointerDownInfo.half = (p.x - noteStartX) >= noteWidthPx/2 ? 'right' : 'left';
-    return; // resolved on move (drag -> move/resize) or up (tap -> select/delete)
+    // Only the actual right edge resizes. The rest of the note always follows
+    // the finger, which makes touch dragging predictable.
+    const edgePx = Math.min(10, Math.max(4, noteWidthPx*0.18));
+    pointerDownInfo.action =
+      p.x >= noteStartX + Math.max(0, noteWidthPx-edgePx) ? 'resize' : 'move';
+    return;
   }
 
   if(mode==='input'){
     longPressTimer = setTimeout(()=>{
-      const startTick = floorTick(tick);
-      dragNote = {startTick, lengthTick:gridTicks(), pitch, id:null};
+      if(!pointerDownInfo) return;
+      const startTick = floorTick(pointerDownInfo.tick);
+      dragNote = {startTick, lengthTick:gridTicks(), pitch:pointerDownInfo.pitch, id:null};
+      // Keep the placement boundary alive while the new note is being dragged.
+      notePlaceGuide = {startTick:dragNote.startTick, endTick:dragNote.startTick+dragNote.lengthTick, pitch:dragNote.pitch};
       drawGrid();
       navigator.vibrate && navigator.vibrate(10);
-      startLivePreview(song.activeTrack, pitch);
+      startLivePreview(song.activeTrack, pointerDownInfo.pitch);
     }, LONG_PRESS_MS);
   } else { // select mode: long-press starts rubber band
     longPressTimer = setTimeout(()=>{
+      if(!pointerDownInfo) return;
       selRect = {tick0:xToTick(p.x), pf0:yToNoteFloat(p.y), tick1:xToTick(p.x), pf1:yToNoteFloat(p.y)};
       drawGrid();
       navigator.vibrate && navigator.vibrate(10);
@@ -1368,19 +1441,57 @@ function floorLengthToPointer(startTick, pointerTick){
   return Math.max(gt, (units+1)*gt);
 }
 
+// Keep the visible note-range boundary attached to the note currently being
+// dragged/resized. The old implementation cleared notePlaceGuide as soon as
+// movement started, so the boundary disappeared and could not follow the note.
+function syncNoteDragGuide(nt){
+  if(!nt){ notePlaceGuide=null; return; }
+  notePlaceGuide = {
+    startTick: nt.startTick,
+    endTick: nt.startTick + nt.lengthTick,
+    pitch: nt.pitch
+  };
+}
+
 let lastPointerPos=null;
 function onGridMove(e){
   const p = localPos(e);
   lastPointerPos = p;
   if(!pointerDownInfo) return;
   const justCrossed = !pointerDownInfo.moved && (Math.abs(p.x-pointerDownInfo.p.x)>MOVE_THRESHOLD_PX || Math.abs(p.y-pointerDownInfo.p.y)>MOVE_THRESHOLD_PX);
-  if(justCrossed) pointerDownInfo.moved = true;
+  if(justCrossed){
+    pointerDownInfo.moved = true;
+    clearTimeout(longPressTimer);
+    // For a new-note gesture, moving outside the long-press threshold cancels
+    // the pending placement immediately. The guide is removed and no note
+    // will be created from this gesture.
+    if(!pointerDownInfo.hitNote){
+      notePlaceGuide = null;
+      drawGrid();
+      return;
+    }
+  }
 
-  // dragging an existing note: decide move vs resize on first real movement
+  // Before the long-press creates dragNote, keep the guide attached to the
+  // grid cell currently under the finger. This makes the intended placement
+  // visible during the entire press-to-create delay.
+  if(!pointerDownInfo.hitNote && !dragNote && !pointerDownInfo.moved && mode==='input'){
+    const guideTick = floorTick(xToTick(p.x));
+    const guidePitch = yToNote(p.y);
+    notePlaceGuide = {
+      startTick: guideTick,
+      endTick: guideTick + gridTicks(),
+      pitch: guidePitch
+    };
+    drawGrid();
+    return;
+  }
+
+  // dragging an existing note: move normally; resize only from its right edge.
   if(pointerDownInfo.hitNote && pointerDownInfo.moved){
     clearTimeout(longPressTimer);
     const tr = song.tracks[song.activeTrack];
-    if(pointerDownInfo.half==='right'){
+    if(pointerDownInfo.action==='resize'){
       if(!resizeInfo){
         const nt0 = pointerDownInfo.hitNote;
         const ids = selection.has(nt0.id) ? [...selection] : [nt0.id];
@@ -1390,6 +1501,7 @@ function onGridMove(e){
         startResizeAutoscroll();
       }
       updateResizePositions(xToTick(p.x));
+      syncNoteDragGuide(pointerDownInfo.hitNote);
       drawGrid();
       return;
     } else {
@@ -1399,6 +1511,7 @@ function onGridMove(e){
         startDragMoveAutoscroll();
       }
       updateDragMovePositions(xToTick(p.x), yToNote(p.y));
+      syncNoteDragGuide(pointerDownInfo.hitNote);
       drawGrid();
       return;
     }
@@ -1411,6 +1524,12 @@ function onGridMove(e){
       dragNote.pitch = pitch;
       startLivePreview(song.activeTrack, pitch);
     }
+    // The guide must follow the actual preview note on every pointer move.
+    notePlaceGuide = {
+      startTick: dragNote.startTick,
+      endTick: dragNote.startTick + dragNote.lengthTick,
+      pitch: dragNote.pitch
+    };
     drawGrid();
     return;
   }
@@ -1420,8 +1539,15 @@ function onGridMove(e){
   }
 }
 
-function onGridUp(e){
-  if(!pointerDownInfo){ return; }
+function finishGridGesture(e){
+  if(!pointerDownInfo){
+    // Be defensive: if a pointerup/cancel arrives after the gesture state was
+    // cleared, the placement guide must never be left painted on the canvas.
+    notePlaceGuide=null;
+    dragNote=null;
+    drawGrid();
+    return;
+  }
   clearTimeout(longPressTimer);
 
   if(resizeInfo){
@@ -1466,8 +1592,18 @@ function onGridUp(e){
   stopLivePreview();
   stopAllPreviewVoices();
   pushUndoIfChanged(gestureUndoBefore);
+  notePlaceGuide=null;
+  dragNote=null;
   pointerDownInfo=null;
 }
+
+function onGridUp(e){
+  finishGridGesture(e);
+}
+
+gridCanvas.addEventListener('pointerup', onGridUp);
+gridCanvas.addEventListener('pointercancel', onGridUp);
+gridCanvas.addEventListener('lostpointercapture', onGridUp);
 
 /* ---- edge autoscroll while a rubber-band selection is being dragged (that gesture eats all
    other input, so the shadow scrollbars can't be used at the same time) ---- */
@@ -1531,6 +1667,7 @@ function startDragMoveAutoscroll(){
     else if(lastPointerPos.x > gw-EDGE){ view.scrollX += SPEED/view.pxPerTick; moved=true; }
     if(moved){
       updateDragMovePositions(xToTick(lastPointerPos.x), yToNote(lastPointerPos.y));
+      if(pointerDownInfo && pointerDownInfo.hitNote) syncNoteDragGuide(pointerDownInfo.hitNote);
       drawAll();
     }
   }, 40);
@@ -1561,6 +1698,7 @@ function startResizeAutoscroll(){
     else if(lastPointerPos.x > gw-EDGE){ view.scrollX += SPEED/view.pxPerTick; moved=true; }
     if(moved){
       updateResizePositions(xToTick(lastPointerPos.x));
+      if(pointerDownInfo && pointerDownInfo.hitNote) syncNoteDragGuide(pointerDownInfo.hitNote);
       drawAll();
     }
   }, 40);
@@ -2117,11 +2255,17 @@ trackGridEl.addEventListener('pointermove', e=>{
   }
 });
 function endTrackGridDrag(){
-  if(trackGridDragging && !trackGridOutside) openTrackDialog();
   trackGridDragging=false;
 }
 trackGridEl.addEventListener('pointerup', endTrackGridDrag);
 trackGridEl.addEventListener('pointercancel', ()=>{ trackGridDragging=false; });
+
+// A normal short tap is a click; only a drag that actually leaves the control
+// is treated as track navigation. This keeps the dialog easy to open on touch.
+trackGridEl.addEventListener('click', ()=>{
+  if(!trackGridOutside) openTrackDialog();
+  trackGridOutside=false;
+});
 
 function openOverlay(id){
   const el = document.getElementById(id);
@@ -2206,11 +2350,13 @@ document.getElementById('midiFileInput').onchange=async (e)=>{
   try{
     const buf = await f.arrayBuffer();
     const imported = parseMidiFile(buf);
-    if(imported.name==='[untitled]'){
-      imported.name = f.name.replace(/\.(mid|midi)$/i,'') || '[untitled]';
-    }
+    // The project name shown by the app should match the actual imported MIDI
+    // filename. MIDI title/text metadata can be translated, stale, or simply
+    // unrelated to the filename, so do not use it as the project name here.
+    const importedFilename = normalizeImportedFilename(f.name);
+    imported.name = importedFilename.replace(/\.(mid|midi)$/i,'') || '[untitled]';
     loadSongObject(imported);
-    showToast('MIDIファイルを読み込みました: '+f.name);
+    showToast('MIDIファイルを読み込みました: '+normalizeImportedFilename(f.name));
   }catch(err){
     console.error(err);
     alert('MIDIファイルの読み込みに失敗しました: '+err.message);
@@ -2338,80 +2484,688 @@ async function encodeAndDownloadViaMediaRecorder(buffer, format, filenameBase){
   if(actualExt===format) showToast('書き出し完了('+actualExt.toUpperCase()+')');
   else showToast(format.toUpperCase()+'非対応のため'+actualExt.toUpperCase()+'で書き出しました');
 }
-document.getElementById('exportAudioGo').onclick=async ()=>{
-  const leadMeasures = Math.max(0, +document.getElementById('exportLeadMeasures').value||0);
-  const trailMeasures = Math.max(0, +document.getElementById('exportTrailMeasures').value||1);
-  closeOverlay('exportAudioOverlay');
-  ensureAudio();
+/* ---- Low-level offline mixer -------------------------------------------------
+   Export path for non-SF2 instruments.  Unlike the legacy Web Audio renderer,
+   this schedules no AudioNode per note.  One AudioWorkletProcessor owns the
+   complete song and mixes voices directly into the stereo output buffer.
+   SF2 remains on the legacy path for now, as requested. */
+let lowLevelWorkletUrl = null;
 
-  exportCancelled = false;
-  const cancelBtn = document.getElementById('exportCancelBtn');
-  cancelBtn.disabled = false; cancelBtn.textContent = 'キャンセル';
-  setExportProgress('準備中...', 0);
-  openOverlay('exportProgressOverlay');
+function buildLowLevelWorkletSource(){
+  return String.raw`
+class MidiLowLevelMixer extends AudioWorkletProcessor {
+  constructor(options){
+    super();
+    const o=options.processorOptions||{};
+    this.cfg=o.cfg||{tracks:[],sampleRate:sampleRate,master:0.9};
+    this.sr=this.cfg.sampleRate||sampleRate;
+    this.frame=0;
+    this.cancelled=false;
+    this.cursors=this.cfg.tracks.map(()=>0);
+    this.active=[];
+    this.port.onmessage=e=>{ if(e.data && e.data.type==='cancel') this.cancelled=true; };
+  }
 
-  const contentEndTick = Math.max(0, ...song.tracks.flatMap(t=>t.notes.map(n=>n.startTick+n.lengthTick)), 0);
-  const leadTicks = leadMeasures*ticksPerMeasure(tsForMeasure(1));
-  const trailTs = tsForMeasure(tickToMeasure(contentEndTick));
-  const trailTicks = trailMeasures*ticksPerMeasure(trailTs);
-  const leadSeconds = leadTicks/PPQ*(60/tempoAtTick(0));
-  const contentSeconds = tickToSeconds(contentEndTick);
-  const trailSeconds = trailTicks/PPQ*(60/tempoAtTick(contentEndTick));
-  const totalSeconds = Math.max(0.5, leadSeconds+contentSeconds+trailSeconds);
-  const sampleRate = 44100;
+  _pitchInfo(v, age){
+    if(!v.curve && !v.vibrato) return 1;
+    let semi=0;
+    const c=v.curve;
+    if(c && c.length>=2){
+      let j=v.curveIndex||0;
+      while(j<c.length-2 && age>c[j+1][0]) j++;
+      v.curveIndex=j;
+      const a=c[j], b=c[Math.min(j+1,c.length-1)];
+      if(b[0]===a[0]) semi=b[1];
+      else {
+        const q=Math.max(0,Math.min(1,(age-a[0])/(b[0]-a[0])));
+        semi=a[1]+(b[1]-a[1])*q;
+      }
+    }
+    const vb=v.vibrato;
+    if(vb && vb[0]){
+      const d=Math.max(0,Math.min(2,vb[0]));
+      const delay=Math.max(0,vb[2]||0);
+      if(age>=delay) semi += d*Math.sin(2*Math.PI*(vb[1]||0)* (age-delay));
+    }
+    return Math.pow(2,semi/12);
+  }
+
+  _env(v, age){
+    if(v.kind===6){
+      const e=v.env;
+      const atk=Math.max(.002,e[0]), dec=Math.max(.002,e[1]);
+      const sus=Math.max(0,Math.min(1,e[2])), rel=Math.max(.01,e[3]);
+      const peak=Math.max(.05,v.vel/127);
+      if(age<atk) return peak*(age/atk);
+      if(age<atk+dec) return peak + (peak*sus-peak)*((age-atk)/dec);
+      const relStart=Math.max(atk+dec,v.dur);
+      if(age<relStart) return peak*sus;
+      if(age>=relStart+rel) return 0;
+      return peak*sus*Math.pow(0.0001/Math.max(.0001,peak*sus),(age-relStart)/rel);
+    }
+    if(v.kind===5){
+      const atk=.008, rel=.15, peak=Math.max(.05,v.vel/127)*.25;
+      if(age<atk) return peak*(age/atk);
+      if(age<v.dur) return peak;
+      if(age>=v.dur+rel) return 0;
+      return peak*Math.pow(.0001/Math.max(.0001,peak),(age-v.dur)/rel);
+    }
+    if(v.kind===4){
+      if(age>=.2) return 0;
+      return .5*Math.pow(Math.max(0,1-age/.2),2);
+    }
+    const atk=.01, rel=Math.min(.4,v.dur*.5), peak=.28;
+    if(age<atk) return peak*(age/atk);
+    if(age<v.dur-rel) return peak;
+    if(age<v.dur) return peak*Math.pow(.0001/Math.max(.0001,peak),(age-(v.dur-rel))/Math.max(.0001,rel));
+    return 0;
+  }
+
+  _retroWave(wave, phase){
+    if(!wave || !wave.length) return Math.sin(phase);
+    const n=wave.length;
+    let x=(phase/(2*Math.PI))*n;
+    x-=Math.floor(x/n)*n;
+    const i=x|0, f=x-i;
+    return wave[i]*(1-f)+wave[(i+1)%n]*f;
+  }
+
+  _fmSample(v, pitchMul, dt){
+    const p=v.preset, ops=p.ops, order=p.order, n=ops.length;
+    for(let oi=0;oi<n;oi++) v.done[oi]=0;
+    for(let q=0;q<order.length;q++){
+      const i=order[q], op=ops[i];
+      let f=v.baseFreq*(op.ratio||1)*pitchMul;
+      const incoming=p.incoming[i]||[];
+      for(let k=0;k<incoming.length;k++){
+        const m=incoming[k], mo=ops[m];
+        f += v.fmOut[m]*(v.baseFreq*(mo.ratio||1)*(mo.level==null?1:mo.level));
+      }
+      if(op.feedback) f += v.feedback[i]*(v.baseFreq*(op.ratio||1)*.5*(op.level==null?1:op.level));
+      v.tmpFreq[i]=Math.max(0,f);
+      v.fmOut[i]=Math.sin(v.phases[i]);
+      v.done[i]=1;
+    }
+    for(let i=0;i<n;i++){
+      v.phases[i]=(v.phases[i]+2*Math.PI*v.tmpFreq[i]*dt)%(2*Math.PI);
+      if(ops[i].feedback) v.feedback[i]=v.fmOut[i];
+    }
+    let s=0;
+    for(let k=0;k<p.carriers.length;k++){
+      const ci=p.carriers[k];
+      if(ops[ci]) s += v.fmOut[ci]*(ops[ci].level==null?1:ops[ci].level)*.3;
+    }
+    return s;
+  }
+
+  _makeVoice(tr,n){
+    const v={
+      track:tr, start:n.s, end:n.s+n.d, dur:n.len, vel:n.v,
+      pitch:440*Math.pow(2,(n.p-69)/12), kind:tr.type, curve:n.c||null, vibrato:n.b||null,
+      curveIndex:0, startDurScale:n.len||1, phase:0, phases:null,
+      feedback:null, tmpFreq:null, fmOut:null, done:null, preset:null, wave:tr.wave||null, baseFreq:0, env:null
+    };
+    if(v.kind===6){
+      v.preset=tr.presets[n.f]||tr.presets[0];
+      const ops=v.preset.ops;
+      v.phases=ops.map(o=>o.phase||0);
+      v.feedback=ops.map(()=>0);
+      v.tmpFreq=ops.map(()=>0);
+      v.fmOut=ops.map(()=>0);
+      v.done=ops.map(()=>0);
+      v.baseFreq=v.pitch;
+      v.env=v.preset.env;
+    }
+    return v;
+  }
+
+  _activate(until){
+    for(let ti=0;ti<this.cfg.tracks.length;ti++){
+      const tr=this.cfg.tracks[ti], ns=tr.notes;
+      let c=this.cursors[ti];
+      while(c<ns.length && ns[c].s<until){
+        const n=ns[c++];
+        if(n.d>n.s) this.active.push(this._makeVoice(tr,n));
+      }
+      this.cursors[ti]=c;
+    }
+  }
+
+  process(inputs,outputs){
+    const out=outputs[0];
+    const L=out[0], R=out[1]||out[0];
+    L.fill(0); if(R!==L) R.fill(0);
+    if(this.cancelled){ this.frame+=L.length; return true; }
+    const blockEnd=this.frame+L.length;
+    this._activate(blockEnd);
+    for(let i=0;i<L.length;i++){
+      const fr=this.frame+i;
+      let l=0,r=0;
+      for(let j=this.active.length-1;j>=0;j--){
+        const v=this.active[j];
+        if(fr<v.start || fr>=v.end){ if(fr>=v.end) this.active.splice(j,1); continue; }
+        const age=(fr-v.start)/this.sr;
+        const pm=this._pitchInfo(v,age);
+        let s=0;
+        if(v.kind===6) s=this._fmSample(v,pm,1/this.sr);
+        else if(v.kind===5){
+          const f=v.pitch*pm;
+          v.phase=(v.phase+2*Math.PI*f/this.sr)%(2*Math.PI);
+          s=this._retroWave(v.wave,v.phase);
+        }else if(v.kind===4){
+          // Deterministic short noise for the drum fallback.
+          v.phase=(v.phase+1)>>>0;
+          let z=(v.phase*1664525+1013904223)>>>0;
+          s=((z/4294967296)*2-1);
+        }else{
+          const f=v.pitch*pm;
+          v.phase=(v.phase+2*Math.PI*f/this.sr)%(2*Math.PI);
+          if(v.kind===1) s=Math.sin(v.phase);
+          else if(v.kind===2) s=2*Math.abs(2*((v.phase/(2*Math.PI))-.5))-1;
+          else s=2*(v.phase/(2*Math.PI)) - 1;
+        }
+        const e=this._env(v,age), x=s*e*(v.vel/127)*v.track.gain;
+        l+=x*v.track.panL; r+=x*v.track.panR;
+      }
+      L[i]=l*this.cfg.master; R[i]=r*this.cfg.master;
+    }
+    this.frame=blockEnd;
+    return true;
+  }
+}
+registerProcessor('midi-low-level-mixer',MidiLowLevelMixer);
+`;
+}
+
+async function getLowLevelWorkletUrl(){
+  if(lowLevelWorkletUrl) return lowLevelWorkletUrl;
+  const blob=new Blob([buildLowLevelWorkletSource()],{type:'application/javascript'});
+  lowLevelWorkletUrl=URL.createObjectURL(blob);
+  return lowLevelWorkletUrl;
+}
+
+function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
+  const anySolo=song.tracks.some(t=>t.solo);
+  const tracks=[];
+  const presetPool=[];
+  const presetIds=new Map();
+  function presetId(p){
+    let key=JSON.stringify(p);
+    if(presetIds.has(key)) return presetIds.get(key);
+    const ops=(p.operators||defaultFmOperators()).map(o=>({ratio:o.ratio||1,phase:o.phase||0,level:o.level==null?1:o.level,feedback:!!o.feedback}));
+    const algo=FM_ALGORITHMS[p.algorithm||0]||FM_ALGORITHMS[0];
+    const incoming=Array.from({length:ops.length},()=>[]);
+    (algo.mods||[]).forEach(([m,d])=>{ if(incoming[d]) incoming[d].push(m); });
+    const indeg=Array(ops.length).fill(0); (algo.mods||[]).forEach(([m,d])=>{ if(m>=0&&m<ops.length&&d>=0&&d<ops.length) indeg[d]++; }); const order=[]; const q=[]; indeg.forEach((x,i)=>{if(x===0)q.push(i);}); while(q.length){const x=q.shift();order.push(x);(algo.mods||[]).forEach(([m,d])=>{if(m===x&&--indeg[d]===0)q.push(d);});} if(order.length!==ops.length) for(let i=0;i<ops.length;i++) if(!order.includes(i)) order.push(i); const pp={ops,order,carriers:[...(algo.carriers||[])],incoming,env:[Math.max(.002,(p.envelope||defaultFmEnvelope()).attack),Math.max(.002,(p.envelope||defaultFmEnvelope()).decay),Math.max(0,Math.min(1,(p.envelope||defaultFmEnvelope()).sustain)),Math.max(.01,(p.envelope||defaultFmEnvelope()).release)]};
+    const id=presetPool.length; presetPool.push(pp); presetIds.set(key,id); return id;
+  }
+  song.tracks.forEach((tr,ti)=>{
+    const audible=anySolo?tr.solo:!tr.muted;
+    const type=tr.instrumentType==='fm'?6:tr.instrumentType==='synth'?5:(tr.instrument===-1?4:(categoryFor(tr.instrument)==='bass'?1:categoryFor(tr.instrument)==='pad'?3:2));
+    let wave=null;
+    if(type===5) wave=(getActiveWaveformSamples(tr)||defaultRetroWaveform()).slice();
+    const pan=(tr.pan||0)/100, a=(pan+1)*Math.PI/4;
+    const out={type,instrument:tr.instrument,gain:audible?tr.volume/127:0,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),wave,notes:[],presets:presetPool};
+    tr.notes.forEach(nt=>{
+      const endTick=effectiveNoteEndTick(ti,nt);
+      const when=leadSeconds+tickToSeconds(nt.startTick);
+      const dur=Math.max(.01,tickSpanSeconds(nt.startTick,endTick));
+      const n={s:Math.floor(when*sampleRate),d:Math.floor((when+dur)*sampleRate),len:dur,p:nt.pitch,v:nt.velocity??100};
+      if(nt.pitchCurve&&nt.pitchCurve.length>=2) n.c=nt.pitchCurve.map(pt=>[pt.t*dur,pt.semi]);
+      const vib=resolveVibratoHz(nt.vibrato,nt.startTick);
+      if(vib) n.b=[vib.depth,vib.speed,vib.delay];
+      if(type===6) n.f=presetId(getFmPresetForTrack(tr,nt.startTick));
+      out.notes.push(n);
+    });
+    out.notes.sort((a,b)=>a.s-b.s);
+    tracks.push(out);
+  });
+  return {sampleRate,master:.9,totalFrames:Math.ceil(totalSeconds*sampleRate),tracks};
+}
+
+async function waitForSf2Ready(timeoutMs=12000){
+  if(sf2Ready) return true;
+  if(!sf2LoadStarted){ sf2LoadStarted=true; sf2LoadPromise=loadDefaultSF2(); }
+  const started=performance.now();
+  while(!sf2Ready && performance.now()-started<timeoutMs){
+    if(sf2LoadPromise) await Promise.race([sf2LoadPromise, new Promise(r=>setTimeout(r,80))]);
+    else await new Promise(r=>setTimeout(r,80));
+  }
+  return !!sf2Ready;
+}
+
+async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
+  /*
+     Pure-JS low-level renderer.
+     This deliberately does NOT depend on AudioWorklet/OfflineAudioContext.
+     It writes the final PCM directly into an AudioBuffer, so browsers that
+     cannot run an AudioWorklet inside OfflineAudioContext can still export.
+
+     The important architectural change remains the same: no Web Audio node is
+     created per note. Each note is mixed directly into the final PCM buffers.
+     SF2 stays on the legacy renderer for now.
+  */
+  const sf2Used=song.tracks.some(tr=>tr.instrumentType==='sf2');
+  if(sf2Used) return null;
+  if(!actx) ensureAudio();
+  const needsPianoSf2=song.tracks.some(tr=>tr.instrumentType==='preset' && tr.instrument>=0 && tr.instrument<8 && tr.notes.length);
+  if(needsPianoSf2 && !sf2Ready){
+    setExportProgress('ピアノ音源を準備中...',.01);
+    await waitForSf2Ready();
+  }
+
+  const cfg=buildLowLevelRenderConfig(totalSeconds,sampleRate,leadSeconds);
+  const totalFrames=cfg.totalFrames;
+  const buffer=actx.createBuffer(2,totalFrames,sampleRate);
+  const L=buffer.getChannelData(0), R=buffer.getChannelData(1);
+  const sr=sampleRate;
+
+  function pitchMulAt(note,age){
+    let semi=0;
+    const c=note.c;
+    if(c && c.length>=2){
+      let j=note._curveIndex||0;
+      while(j<c.length-2 && age>c[j+1][0]) j++;
+      note._curveIndex=j;
+      const a=c[j], b=c[Math.min(j+1,c.length-1)];
+      if(b[0]===a[0]) semi=b[1];
+      else {
+        const q=Math.max(0,Math.min(1,(age-a[0])/(b[0]-a[0])));
+        semi=a[1]+(b[1]-a[1])*q;
+      }
+    }
+    const v=note.b;
+    if(v && v[0]){
+      const delay=Math.max(0,v[2]||0);
+      if(age>=delay) semi += v[0]*Math.sin(2*Math.PI*(v[1]||0)*(age-delay));
+    }
+    return Math.pow(2,semi/12);
+  }
+
+  function envAt(kind,age,dur,vel,env){
+    if(kind===6){
+      const atk=Math.max(.002,env[0]), dec=Math.max(.002,env[1]);
+      const sus=Math.max(0,Math.min(1,env[2])), rel=Math.max(.01,env[3]);
+      const peak=Math.max(.05,vel/127);
+      if(age<atk) return peak*(age/atk);
+      if(age<atk+dec) return peak+(peak*sus-peak)*((age-atk)/dec);
+      const relStart=Math.max(atk+dec,dur);
+      if(age<relStart) return peak*sus;
+      if(age>=relStart+rel) return 0;
+      return peak*sus*Math.pow(.0001/Math.max(.0001,peak*sus),(age-relStart)/rel);
+    }
+    if(kind===5){
+      const atk=.008, rel=.15, peak=Math.max(.05,vel/127)*.25;
+      if(age<atk) return peak*(age/atk);
+      if(age<dur) return peak;
+      if(age>=dur+rel) return 0;
+      return peak*Math.pow(.0001/Math.max(.0001,peak),(age-dur)/rel);
+    }
+    if(kind===4){
+      if(age>=.2) return 0;
+      return .5*Math.pow(Math.max(0,1-age/.2),2);
+    }
+    const atk=.01, rel=Math.min(.4,dur*.5), peak=.28;
+    if(age<atk) return peak*(age/atk);
+    if(age<dur-rel) return peak;
+    if(age<dur) return peak*Math.pow(.0001/Math.max(.0001,peak),(age-(dur-rel))/Math.max(.0001,rel));
+    return 0;
+  }
+
+  function waveSample(wave,phase){
+    if(!wave || !wave.length) return Math.sin(phase);
+    const n=wave.length;
+    let x=(phase/(2*Math.PI))*n;
+    x-=Math.floor(x/n)*n;
+    const i=x|0, f=x-i;
+    return wave[i]*(1-f)+wave[(i+1)%n]*f;
+  }
+
+  function addSample(idx,x,panL,panR){
+    L[idx]+=x*panL;
+    R[idx]+=x*panR;
+  }
+  // Built-in GM timbre engine for the default MIDI preset bank.
+  // This intentionally does NOT use SF2.  Each GM program gets a compact
+  // procedural recipe so the fast PCM renderer preserves the selected MIDI
+  // instrument instead of collapsing every preset to a generic sine/triangle.
+  function gmTimbre(program, phase, freq, age, dur, vel){
+    const p=Math.max(0,Math.min(127,program|0));
+    const x=phase/(2*Math.PI);
+    const s=Math.sin(phase), s2=Math.sin(phase*2), s3=Math.sin(phase*3), s4=Math.sin(phase*4), s5=Math.sin(phase*5), s7=Math.sin(phase*7);
+    const tri=1-4*Math.abs(Math.round(x)-x);
+    const saw=2*(x-Math.floor(x+.5));
+    const sq=x<0.5?1:-1;
+    const noiseSeed=((Math.floor(age*44100)*1664525 + (p+1)*1013904223)>>>0)/4294967296;
+    const noise=noiseSeed*2-1;
+    const n=p;
+    if(n<8){ // Piano / electric piano / harpsichord / clavinet
+      if(n===0) return .72*s + .20*s2 + .11*s3 + .055*s4 + .025*s7 + .018*Math.sin(phase*6.11)*Math.exp(-age*4.8);
+      if(n===1) return .70*s + .24*s2 + .12*s3 + .06*s4;
+      if(n===2) return .66*s + .28*s2 + .14*s3 + .07*s5;
+      if(n===3) return .55*s + .35*s2 + .18*s3 + .10*s5;
+      if(n===4||n===5) return .72*s + .20*s2 + .14*s3 + .06*s4;
+      if(n===6) return .58*s + .32*s2 + .22*s3 + .12*s4 + .08*s5;
+      return .55*s + .28*s2 + .20*s3 + .12*s5;
+    }
+    if(n<16){ // chromatic percussion
+      const bells=[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0][n-8];
+      return .55*s + .30*s2 + .18*s3 + .10*s5 + .08*Math.sin(phase*2.71)*Math.exp(-age*7) + bells;
+    }
+    if(n<24){ // organs / accordion / harmonica
+      return .46*s + .22*s2 + .13*s3 + .08*s4 + .05*s5 + .10*tri;
+    }
+    if(n<32){ // guitars
+      return .55*s + .20*s2 + .12*s3 + .07*s4 + .05*tri + .025*noise;
+    }
+    if(n<40){ // basses
+      return .78*s + .18*s2 + .08*s3 + .04*tri;
+    }
+    if(n<48){ // strings / harp / timpani
+      return .62*s + .22*s2 + .12*s3 + .06*s5 + .10*tri;
+    }
+    if(n<56){ // ensembles / choir
+      return .48*s + .24*s2 + .16*s3 + .08*s4 + .12*Math.sin(phase*1.003);
+    }
+    if(n<64){ // brass
+      return .48*s + .30*s2 + .18*s3 + .10*s4 + .05*s5;
+    }
+    if(n<72){ // reeds
+      return .52*s + .20*s2 + .15*s3 + .10*s4 + .08*tri;
+    }
+    if(n<80){ // pipes
+      return .60*s + .20*s2 + .12*s3 + .08*s4;
+    }
+    if(n<88){ // synth leads
+      const base=(n===80||n===81||n===84)?sq:saw;
+      return .65*base + .20*s + .10*s2;
+    }
+    if(n<96){ // synth pads
+      return .42*s + .22*Math.sin(phase*1.997) + .16*Math.sin(phase*.501) + .12*tri;
+    }
+    if(n<104){ // synth FX
+      return .45*noise + .25*Math.sin(phase*(1+age*2)) + .15*s;
+    }
+    if(n<112){ // ethnic
+      return .55*s + .25*s2 + .15*s3 + .12*tri;
+    }
+    if(n<120){ // percussive
+      return .50*noise + .30*s + .18*s2;
+    }
+    return .35*noise + .25*s + .18*s2 + .12*Math.sin(phase*3.17);
+  }
+
+  function gmEnvelope(program, age, dur, vel){
+    const p=program|0, amp=Math.max(.03,vel/127);
+    if(p<8){
+      // Piano family: sharp hammer attack followed by a long, key-dependent decay.
+      const attack=Math.min(.012,Math.max(.002,dur*.08));
+      const decay=1.2 + (p===0?1.4:0.5);
+      if(age<attack) return amp*(age/attack);
+      const body=Math.exp(-(age-attack)/decay);
+      const release=.35;
+      if(age<dur) return amp*(.78*body + .12);
+      if(age<dur+release) return amp*.12*Math.pow(.0001/.12,(age-dur)/release);
+      return 0;
+    }
+    if(p>=32&&p<40){
+      const attack=.015, release=.18;
+      if(age<attack) return amp*age/attack;
+      if(age<dur) return amp*(.75+.25*Math.exp(-(age-attack)*1.8));
+      if(age<dur+release) return amp*.7*Math.pow(.0001/.7,(age-dur)/release);
+      return 0;
+    }
+    if(p>=56&&p<80){
+      const attack=.025, release=.18;
+      if(age<attack) return amp*age/attack;
+      if(age<dur) return amp*.82;
+      if(age<dur+release) return amp*.82*Math.pow(.0001/.82,(age-dur)/release);
+      return 0;
+    }
+    if(p>=80&&p<96){
+      const attack=.08, release=.35;
+      if(age<attack) return amp*age/attack;
+      if(age<dur) return amp*.65;
+      if(age<dur+release) return amp*.65*Math.pow(.0001/.65,(age-dur)/release);
+      return 0;
+    }
+    const attack=.01, release=Math.min(.3,Math.max(.08,dur*.25));
+    if(age<attack) return amp*age/attack;
+    if(age<dur) return amp*.7;
+    if(age<dur+release) return amp*.7*Math.pow(.0001/.7,(age-dur)/release);
+    return 0;
+  }
+
+  let processedTracks=0;
+  for(const tr of cfg.tracks){
+    const pan=tr.pan||0;
+    const panAngle=(pan+1)*Math.PI/4;
+    const panL=Math.cos(panAngle)*tr.gain;
+    const panR=Math.sin(panAngle)*tr.gain;
+    const notes=tr.notes;
+
+    for(let ni=0;ni<notes.length;ni++){
+      if(exportCancelled) return buffer;
+      const n=notes[ni];
+      const start=Math.max(0,n.s|0), end=Math.min(totalFrames,n.d|0);
+      if(end<=start) continue;
+      const dur=n.len||((end-start)/sr);
+      const vel=n.v||100;
+      const pitch=440*Math.pow(2,(n.p-69)/12);
+      const kind=tr.type;
+
+      // GM piano presets use the actual SF2 piano sample in the low-level mixer.
+      // This keeps the fast PCM renderer while restoring the intended piano timbre.
+      if(kind>=2 && kind!==4 && tr.type===2 && tr.instrument>=0 && tr.instrument<8 && sf2Ready){
+        const program=tr.instrument;
+        const preset=sf2.findPreset(0,program);
+        const vp=preset ? sf2VoiceParams(preset,n.p,vel) : null;
+        if(vp){
+          const params=sf2ComputeParams(vp.instGens,vp.presetGens);
+          const sample=vp.sample;
+          const src=sf2.sampleData;
+          const sampleLen=Math.max(1,sample.end-sample.start);
+          const rootKey=params.overridingRootKey>=0 ? params.overridingRootKey : sample.originalPitch;
+          const baseRate=Math.pow(2,((n.p-rootKey)+params.coarseTune+params.fineTune/100+(sample.pitchCorrection||0)/100)/12);
+          const peak=Math.pow(10,-params.attenuationCb/200)*Math.max(.05,vel/127);
+          const sustain=Math.max(.0001,peak*Math.pow(10,-params.sustainCb/200));
+          const t0=Math.max(0,params.delay);
+          const atk=Math.max(.001,params.attack), hold=Math.max(0,params.hold), dec=Math.max(.001,params.decay);
+          const rel=Math.min(.6,Math.max(.08,params.release));
+          const peakTime=t0+atk, holdEnd=peakTime+hold, decEnd=holdEnd+dec;
+          const looped=params.sampleModes===1 || params.sampleModes===3;
+          const loopStart=Math.max(0,sample.startLoop-sample.start);
+          const loopEnd=Math.max(loopStart+1,sample.endLoop-sample.start);
+          let srcPos=0;
+          for(let fr=start;fr<end;fr++){
+            const age=(fr-start)/sr;
+            const pm=pitchMulAt(n,age);
+            const rate=baseRate*pm*(sample.sampleRate||44100)/sr;
+            if(age<t0) srcPos+=rate;
+            else {
+              if(looped && srcPos>=loopEnd){
+                const span=Math.max(1,loopEnd-loopStart);
+                srcPos=loopStart+((srcPos-loopStart)%span);
+              }
+              const si=Math.floor(srcPos);
+              const frac=srcPos-si;
+              let smp=0;
+              if(si>=0 && si<sampleLen){
+                const a=(src[sample.start+si]||0)/32768;
+                const b=(src[sample.start+Math.min(si+1,sampleLen-1)]||0)/32768;
+                smp=a+(b-a)*frac;
+              } else if(looped && si>=loopStart){
+                const span=Math.max(1,loopEnd-loopStart);
+                const wrapped=loopStart+((si-loopStart)%span);
+                const a=(src[sample.start+wrapped]||0)/32768;
+                smp=a;
+              }
+              srcPos+=rate;
+              let e=0;
+              if(age<t0) e=0;
+              else if(age<peakTime) e=peak*(age-t0)/atk;
+              else if(age<holdEnd) e=peak;
+              else if(age<decEnd) e=peak+(sustain-peak)*((age-holdEnd)/dec);
+              else if(age<dur) e=sustain;
+              else if(age<dur+rel) e=sustain*Math.pow(.0001/Math.max(.0001,sustain),(age-dur)/rel);
+              else e=0;
+              const x=smp*e;
+              addSample(fr,x,panL,panR);
+            }
+          }
+        }
+      }else if(kind===6){
+        const p=tr.presets[n.f]||tr.presets[0];
+        const ops=p.ops;
+        const phases=ops.map(o=>o.phase||0);
+        const prevOut=ops.map(()=>0);
+        const tmpFreq=ops.map(()=>0);
+        const fmOut=ops.map(()=>0);
+        const incoming=p.incoming||[];
+        const order=p.order||ops.map((_,i)=>i);
+        const carriers=p.carriers||[];
+        const env=p.env;
+        for(let fr=start;fr<end;fr++){
+          const age=(fr-start)/sr;
+          const pm=pitchMulAt(n,age);
+          for(let q=0;q<order.length;q++){
+            const oi=order[q], op=ops[oi];
+            let f=pitch*(op.ratio||1)*pm;
+            const inc=incoming[oi]||[];
+            for(let k=0;k<inc.length;k++){
+              const mi=inc[k], mop=ops[mi];
+              f += fmOut[mi]*(pitch*(mop.ratio||1)*(mop.level==null?1:mop.level));
+            }
+            if(op.feedback){
+              f += prevOut[oi]*(pitch*(op.ratio||1)*.5*(op.level==null?1:op.level));
+            }
+            tmpFreq[oi]=Math.max(0,f);
+          }
+          for(let oi=0;oi<ops.length;oi++){
+            const op=ops[oi];
+            phases[oi]=(phases[oi]+2*Math.PI*tmpFreq[oi]/sr)%(2*Math.PI);
+            fmOut[oi]=Math.sin(phases[oi]);
+          }
+          for(let oi=0;oi<ops.length;oi++) if(ops[oi].feedback) prevOut[oi]=fmOut[oi];
+          let smp=0;
+          for(let k=0;k<carriers.length;k++){
+            const ci=carriers[k], op=ops[ci];
+            if(op) smp+=fmOut[ci]*(op.level==null?1:op.level)*.3;
+          }
+          const x=smp*envAt(kind,age,dur,vel,env)*(vel/127);
+          addSample(fr,x,panL,panR);
+        }
+      }else if(kind===5){
+        let phase=0;
+        for(let fr=start;fr<end;fr++){
+          const age=(fr-start)/sr, pm=pitchMulAt(n,age);
+          phase=(phase+2*Math.PI*pitch*pm/sr)%(2*Math.PI);
+          const smp=waveSample(tr.wave,phase);
+          const x=smp*envAt(kind,age,dur,vel,null)*(vel/127);
+          addSample(fr,x,panL,panR);
+        }
+      }else if(kind===4){
+        let seed=(n.p*1103515245+n.s*12345)>>>0;
+        for(let fr=start;fr<Math.min(end,start+Math.ceil(.2*sr));fr++){
+          const age=(fr-start)/sr;
+          seed=(seed*1664525+1013904223)>>>0;
+          const noise=(seed/4294967296)*2-1;
+          const x=noise*envAt(kind,age,dur,vel,null)*(vel/127);
+          addSample(fr,x,panL,panR);
+        }
+      }else{
+        // Default MIDI preset: render the selected GM program with the
+        // built-in timbre engine.  The previous fast path used a category
+        // waveform here, which made Acoustic Grand Piano (program 0), etc.
+        // collapse to a generic triangle/sine-like sound.
+        let phase=0;
+        const program=(tr.instrument==null?0:tr.instrument)|0;
+        for(let fr=start;fr<end;fr++){
+          const age=(fr-start)/sr, pm=pitchMulAt(n,age);
+          phase=(phase+2*Math.PI*pitch*pm/sr)%(2*Math.PI);
+          const smp=gmTimbre(program,phase,pitch*pm,age,dur,vel);
+          const x=smp*gmEnvelope(program,age,dur,vel);
+          addSample(fr,x,panL,panR);
+        }
+      }
+
+      if((ni&7)===0){
+        setExportProgress('低レベルミキサーで生成中...',Math.min(.94,(processedTracks+(ni/Math.max(1,notes.length)))/Math.max(1,cfg.tracks.length)));
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+    processedTracks++;
+  }
+
+  // Match the existing master gain and avoid accidental NaN/Infinity poisoning.
+  for(let i=0;i<totalFrames;i++){
+    let l=L[i]*cfg.master, r=R[i]*cfg.master;
+    L[i]=Number.isFinite(l)?Math.max(-1,Math.min(1,l)):0;
+    R[i]=Number.isFinite(r)?Math.max(-1,Math.min(1,r)):0;
+  }
+  setExportProgress('低レベルミキサーの生成完了',.94);
+  return buffer;
+}
+
+async function legacyOfflineRender(totalSeconds, sampleRate, leadSeconds){
   const offlineCtx = new OfflineAudioContext(2, Math.ceil(totalSeconds*sampleRate), sampleRate);
-
-  // temporarily redirect the live synthesis engine at the offline context — no AnalyserNode here,
-  // since that was continuously running FFT analysis on all 16 tracks during export for no reason
-  // (it's only needed for the live waveform view), which was slowing rendering well below real-time.
   const realActx=actx, realMaster=masterGain, realTrackNodes=trackNodes;
   const savedWaveCache = periodicWaveCache; periodicWaveCache = {};
   actx = offlineCtx;
   masterGain = offlineCtx.createGain(); masterGain.gain.value=0.9; masterGain.connect(offlineCtx.destination);
   buildTrackNodes(false);
-
-  song.tracks.forEach((tr,ti)=>{
-    tr.notes.forEach(nt=>{
-      const when = leadSeconds + tickToSeconds(nt.startTick);
-      const dur = Math.max(0.01, tickSpanSeconds(nt.startTick, effectiveNoteEndTick(ti, nt)));
-      triggerNote(ti, when, nt.pitch, 100, dur, false, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick);
-    });
-  });
-
-  // real progress via OfflineAudioContext's suspend/resume: schedule a pause every ~2.5% of the
-  // total render, report progress at each pause, then resume. This is the actual W3C-sanctioned
-  // way to observe offline-render progress (there's no separate progress event for it).
-  const STEPS = 40;
-  const stepSeconds = totalSeconds/STEPS;
-  for(let i=1;i<STEPS;i++){
-    const suspendAt = i*stepSeconds;
-    offlineCtx.suspend(suspendAt).then(()=>{
-      if(!exportCancelled) setExportProgress('音声を生成中...', suspendAt/totalSeconds);
-      offlineCtx.resume();
-    });
+  song.tracks.forEach((tr,ti)=>tr.notes.forEach(nt=>{
+    const when=leadSeconds+tickToSeconds(nt.startTick);
+    const dur=Math.max(.01,tickSpanSeconds(nt.startTick,effectiveNoteEndTick(ti,nt)));
+    triggerNote(ti,when,nt.pitch,nt.velocity??100,dur,false,nt.pitchCurve,resolveVibratoHz(nt.vibrato,nt.startTick),nt.startTick);
+  }));
+  for(let i=1;i<40;i++){
+    const t=totalSeconds*i/40;
+    offlineCtx.suspend(t).then(()=>{if(!exportCancelled)setExportProgress('音声を生成中...',i/40);offlineCtx.resume();});
   }
+  setExportProgress('音声を生成中...',0);
+  try{return await offlineCtx.startRendering();}
+  finally{actx=realActx;masterGain=realMaster;trackNodes=realTrackNodes;periodicWaveCache=savedWaveCache;try{offlineCtx.close();}catch(e){}}
+}
 
-  setExportProgress('音声を生成中...', 0);
-  let rendered;
+document.getElementById('exportAudioGo').onclick=async ()=>{
+  const leadMeasures=Math.max(0,+document.getElementById('exportLeadMeasures').value||0);
+  const trailMeasures=Math.max(0,+document.getElementById('exportTrailMeasures').value||1);
+  closeOverlay('exportAudioOverlay');
+  ensureAudio();
+  exportCancelled=false;
+  const cancelBtn=document.getElementById('exportCancelBtn');
+  cancelBtn.disabled=false; cancelBtn.textContent='キャンセル';
+  setExportProgress('準備中...',0); openOverlay('exportProgressOverlay');
   try{
-    rendered = await offlineCtx.startRendering();
-  } finally {
-    // restore the live engine no matter what
-    actx = realActx; masterGain = realMaster; trackNodes = realTrackNodes;
-    periodicWaveCache = savedWaveCache;
-  }
-
-  if(exportCancelled){ closeOverlay('exportProgressOverlay'); showToast('書き出しをキャンセルしました'); return; }
-
-  const filenameBase = song.name.replace(/[\[\]]/g,'')||'song';
-  if(exportFormat==='wav'){
-    setExportProgress('WAVファイルを書き出し中...', 0.95);
-    downloadBlob(audioBufferToWavBlob(rendered), filenameBase+'.wav');
+    const contentEndTick=Math.max(0,...song.tracks.flatMap(t=>t.notes.map(n=>n.startTick+n.lengthTick)),0);
+    const leadTicks=leadMeasures*ticksPerMeasure(tsForMeasure(1));
+    const trailTs=tsForMeasure(tickToMeasure(contentEndTick));
+    const trailTicks=trailMeasures*ticksPerMeasure(trailTs);
+    const leadSeconds=leadTicks/PPQ*(60/tempoAtTick(0));
+    const contentSeconds=tickToSeconds(contentEndTick);
+    const trailSeconds=trailTicks/PPQ*(60/tempoAtTick(contentEndTick));
+    const totalSeconds=Math.max(.5,leadSeconds+contentSeconds+trailSeconds);
+    const sampleRate=44100;
+    let rendered=await renderLowLevelMix(totalSeconds,sampleRate,leadSeconds);
+    if(!rendered){
+      setExportProgress('互換レンダラーに切り替え中...',.02);
+      rendered=await legacyOfflineRender(totalSeconds,sampleRate,leadSeconds);
+    }
+    if(exportCancelled){closeOverlay('exportProgressOverlay');showToast('書き出しをキャンセルしました');return;}
+    const filenameBase=song.name.replace(/[\\[\\]]/g,'')||'song';
+    if(exportFormat==='wav'){
+      setExportProgress('WAVファイルを書き出し中...',.95);
+      downloadBlob(audioBufferToWavBlob(rendered),filenameBase+'.wav');
+      closeOverlay('exportProgressOverlay'); showToast('WAVファイルを書き出しました');
+    }else{
+      await encodeAndDownloadViaMediaRecorder(rendered,exportFormat,filenameBase);
+      closeOverlay('exportProgressOverlay');
+    }
+  }catch(err){
+    console.error('Low-level export failed',err);
     closeOverlay('exportProgressOverlay');
-    showToast('WAVファイルを書き出しました');
-  } else {
-    await encodeAndDownloadViaMediaRecorder(rendered, exportFormat, filenameBase);
-    closeOverlay('exportProgressOverlay');
+    showToast('低レベルミキサーでの書き出しに失敗しました');
   }
 };
 document.getElementById('projRename').onclick=()=>{
@@ -3604,7 +4358,7 @@ function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibra
 
 /* ---- audio graph: master -> per-track (gain -> pan) ---- */
 let actx=null, masterGain=null, trackNodes=[];
-let sf2=null, sf2Ready=false, sf2LoadStarted=false;
+let sf2=null, sf2Ready=false, sf2LoadStarted=false, sf2LoadPromise=null;
 let activeVoices=[]; // nodes currently scheduled as part of song playback, so stop can actually silence them
 function stopVoiceHandle(v, now){
   try{
@@ -3626,7 +4380,7 @@ function ensureAudio(){
   actx = new (window.AudioContext||window.webkitAudioContext)();
   masterGain = actx.createGain(); masterGain.gain.value=0.9; masterGain.connect(actx.destination);
   buildTrackNodes();
-  if(!sf2LoadStarted){ sf2LoadStarted=true; loadDefaultSF2(); }
+  if(!sf2LoadStarted){ sf2LoadStarted=true; sf2LoadPromise=loadDefaultSF2(); }
   return actx;
 }
 function effectiveTrackGain(tr){
@@ -3893,7 +4647,7 @@ function runScheduler(){
     const {ti,nt} = scheduleQueue[scheduleIdx];
     const when = playStartTime + tickSpanSeconds(playStartTick, nt.startTick);
     const dur = Math.max(0.01, tickSpanSeconds(nt.startTick, effectiveNoteEndTick(ti, nt)));
-    triggerNote(ti, when, nt.pitch, 100, dur, true, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick);
+    triggerNote(ti, when, nt.pitch, nt.velocity ?? 100, dur, true, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick);
     scheduleIdx++;
   }
   if(!loopEnabled && scheduleIdx>=scheduleQueue.length && nowTick > scheduleEndTick+ (PPQ*2)){
@@ -3909,9 +4663,13 @@ function tickLoop(){
     if(playheadTick >= loopEndTick){
       stopAllVoices();
       playStartTick = loopStartTickVal;
-      playStartTime = actx.currentTime + 0.02;
+      // Do not insert an intentional 20ms gap at the loop boundary.
+      // Schedule the new loop immediately so its first notes are already
+      // in the WebAudio timeline before the next 40ms scheduler tick.
+      playStartTime = actx.currentTime;
       activeVoices = [];
       buildScheduleQueue();
+      runScheduler();
       playheadTick = playStartTick;
     }
   }
@@ -3944,13 +4702,6 @@ function init(){
   updatePitchOverlayInteractivity();
 }
 window.addEventListener('load', init);
-</script>
-<script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(console.error);
-  });
-}
 </script>
 </body>
 </html>
