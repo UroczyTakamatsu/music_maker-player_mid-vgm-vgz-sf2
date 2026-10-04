@@ -2832,71 +2832,208 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
   // This intentionally does NOT use SF2.  Each GM program gets a compact
   // procedural recipe so the fast PCM renderer preserves the selected MIDI
   // instrument instead of collapsing every preset to a generic sine/triangle.
+  /* ============================================================
+     GM1 PROGRAM-SPECIFIC PCM SYNTH ENGINE
+     All 128 General MIDI melodic programs have an explicit recipe.
+     This is intentionally SF2-free: the fast renderer synthesizes
+     the selected GM program directly into PCM.
+     ============================================================ */
+  const GM_PCM_RECIPES = [
+    // 0-7 Piano / keys
+    {w:'piano',h:[.72,.20,.11,.055,.025],atk:.020,bright:1.00},
+    {w:'piano',h:[.68,.25,.13,.07,.025],atk:.016,bright:1.12},
+    {w:'piano',h:[.70,.22,.10,.045,.018],atk:.018,bright:1.05},
+    {w:'piano',h:[.62,.30,.16,.08,.025],atk:.014,bright:1.22},
+    {w:'ep',h:[.72,.30,.18,.08],atk:.010,bright:1.18},
+    {w:'ep',h:[.68,.34,.16,.06],atk:.012,bright:1.30},
+    {w:'harpsi',h:[.62,.34,.20,.11,.06],atk:.004,bright:1.35},
+    {w:'clavi',h:[.48,.32,.24,.16,.10],atk:.003,bright:1.45},
+    // 8-15 Chromatic percussion
+    {w:'mallet',h:[.72,.32,.20,.10],atk:.004,decay:3.0,inh:.31},
+    {w:'bell',h:[.48,.30,.22,.16,.11],atk:.003,decay:2.4,inh:2.01},
+    {w:'bell',h:[.58,.26,.18,.12],atk:.002,decay:2.8,inh:2.71},
+    {w:'vib',h:[.68,.28,.16,.08],atk:.006,decay:3.2,inh:3.99},
+    {w:'mallet',h:[.76,.25,.13,.07],atk:.004,decay:2.2,inh:3.01},
+    {w:'mallet',h:[.58,.36,.22,.10],atk:.003,decay:1.5,inh:2.37},
+    {w:'bell',h:[.55,.25,.18,.12,.08],atk:.002,decay:3.5,inh:2.76},
+    {w:'dulcimer',h:[.66,.29,.16,.08],atk:.003,decay:2.0,inh:1.5},
+    // 16-23 Organs / accordion / harmonica
+    {w:'organ',h:[.72,.22,.16,.10,.07,.05],atk:.030,rot:1.0},
+    {w:'organ',h:[.60,.34,.20,.12,.08],atk:.020,rot:2.0},
+    {w:'organ',h:[.65,.28,.22,.14,.08],atk:.018,rot:2.7},
+    {w:'organ',h:[.78,.24,.14,.08,.05],atk:.035,rot:.55},
+    {w:'organ',h:[.72,.20,.18,.10,.06],atk:.025,rot:1.4},
+    {w:'reed',h:[.68,.24,.18,.10,.06],atk:.018,noise:.025},
+    {w:'reed',h:[.58,.28,.20,.13,.08],atk:.012,noise:.06},
+    {w:'reed',h:[.62,.30,.18,.10],atk:.015,noise:.04},
+    // 24-31 Guitars
+    {w:'guitar',h:[.72,.22,.12,.07,.04],atk:.004,decay:1.8,bright:.82},
+    {w:'guitar',h:[.62,.30,.18,.09,.04],atk:.003,decay:1.5,bright:1.02},
+    {w:'guitar',h:[.58,.25,.18,.11,.07],atk:.006,decay:2.0,bright:1.08},
+    {w:'guitar',h:[.60,.28,.20,.12,.06],atk:.005,decay:1.7,bright:1.15},
+    {w:'guitar',h:[.54,.30,.22,.15,.08],atk:.003,decay:1.0,bright:1.28},
+    {w:'guitar',h:[.52,.30,.24,.16,.10],atk:.003,decay:.85,bright:1.40},
+    {w:'guitar',h:[.48,.28,.24,.18,.12],atk:.002,decay:.72,bright:1.52},
+    {w:'guitar',h:[.45,.25,.22,.18,.12],atk:.004,decay:1.2,bright:1.60,inh:2.0},
+    // 32-39 Bass
+    {w:'bass',h:[.88,.18,.07,.03],atk:.010,decay:1.5,bright:.70},
+    {w:'bass',h:[.82,.22,.09,.04],atk:.008,decay:1.4,bright:.82},
+    {w:'bass',h:[.78,.26,.11,.05],atk:.006,decay:1.2,bright:.98},
+    {w:'bass',h:[.86,.20,.08,.035],atk:.012,decay:1.6,bright:.74},
+    {w:'bass',h:[.72,.30,.13,.06],atk:.004,decay:1.0,bright:1.15,inh:2.0},
+    {w:'bass',h:[.68,.34,.16,.07],atk:.004,decay:.9,bright:1.25,inh:2.5},
+    {w:'bassfm',h:[.70,.24,.12,.05],atk:.008,decay:1.1,mod:2.01,mi:2.8},
+    {w:'bassfm',h:[.66,.28,.14,.06],atk:.006,decay:.95,mod:1.5,mi:3.4},
+    // 40-47 Strings / harp / timpani
+    {w:'string',h:[.78,.18,.09,.04],atk:.10,decay:3.0,vib:.0025},
+    {w:'string',h:[.72,.22,.11,.05],atk:.12,decay:2.8,vib:.0030},
+    {w:'string',h:[.68,.26,.13,.06],atk:.14,decay:2.6,vib:.0032},
+    {w:'string',h:[.80,.16,.08,.03],atk:.16,decay:2.3,vib:.0020},
+    {w:'string',h:[.70,.22,.14,.06],atk:.10,decay:2.0,vib:.007},
+    {w:'pluck',h:[.72,.22,.12,.06],atk:.003,decay:.65},
+    {w:'harp',h:[.76,.20,.10,.05],atk:.006,decay:2.0},
+    {w:'timp',h:[.82,.15,.06],atk:.008,decay:1.7,inh:1.46},
+    // 48-55 Ensembles / choir
+    {w:'string',h:[.68,.25,.14,.07],atk:.16,decay:3.6,vib:.004,detune:.004},
+    {w:'string',h:[.62,.30,.16,.08],atk:.18,decay:4.0,vib:.0035,detune:.006},
+    {w:'stringsaw',h:[.58,.26,.18,.11],atk:.18,decay:3.2,vib:.003},
+    {w:'stringsaw',h:[.54,.30,.20,.12],atk:.20,decay:3.6,vib:.004},
+    {w:'choir',h:[.70,.20,.12,.06],atk:.18,decay:4.0,vib:.004},
+    {w:'choir',h:[.64,.25,.15,.08],atk:.20,decay:3.6,vib:.003},
+    {w:'choir',h:[.58,.30,.18,.10],atk:.16,decay:3.2,vib:.005},
+    {w:'hit',h:[.52,.28,.20,.14,.08],atk:.008,decay:1.2,inh:1.01},
+    // 56-63 Brass
+    {w:'brass',h:[.56,.30,.18,.10,.05],atk:.045,decay:1.4,noise:.02},
+    {w:'brass',h:[.52,.34,.20,.12,.06],atk:.05,decay:1.3,noise:.025},
+    {w:'brass',h:[.50,.30,.18,.12,.07],atk:.07,decay:1.5,noise:.02},
+    {w:'brass',h:[.62,.24,.14,.08],atk:.035,decay:1.1,noise:.015},
+    {w:'brass',h:[.58,.28,.17,.10],atk:.06,decay:1.8,noise:.018},
+    {w:'brass',h:[.52,.32,.22,.12],atk:.055,decay:1.5,noise:.02},
+    {w:'brassfm',h:[.55,.28,.16,.08],atk:.045,decay:1.4,mod:2,mi:1.8},
+    {w:'brassfm',h:[.50,.32,.18,.10],atk:.05,decay:1.3,mod:1.5,mi:2.3},
+    // 64-71 Reeds
+    {w:'sax',h:[.62,.22,.15,.10,.06],atk:.045,decay:1.8,noise:.025,vib:.004},
+    {w:'sax',h:[.58,.27,.18,.11,.06],atk:.04,decay:1.7,noise:.03,vib:.0045},
+    {w:'sax',h:[.55,.30,.20,.12,.07],atk:.035,decay:1.5,noise:.035,vib:.004},
+    {w:'sax',h:[.52,.32,.22,.13,.07],atk:.03,decay:1.4,noise:.04,vib:.0035},
+    {w:'reed',h:[.66,.24,.15,.09,.05],atk:.05,decay:1.9,noise:.025},
+    {w:'reed',h:[.62,.27,.17,.10,.06],atk:.055,decay:2.0,noise:.03},
+    {w:'reed',h:[.58,.30,.20,.12,.07],atk:.05,decay:1.8,noise:.035},
+    {w:'clarinet',h:[.76,.14,.07,.035],atk:.035,decay:2.1,noise:.018},
+    // 72-79 Pipes
+    {w:'flute',h:[.82,.10,.05,.025],atk:.06,decay:2.8,noise:.03,vib:.003},
+    {w:'flute',h:[.78,.13,.07,.03],atk:.055,decay:2.7,noise:.025,vib:.0035},
+    {w:'flute',h:[.72,.18,.09,.04],atk:.05,decay:2.5,noise:.035,vib:.003},
+    {w:'flute',h:[.68,.22,.11,.05],atk:.045,decay:2.3,noise:.04,vib:.0035},
+    {w:'breath',h:[.70,.18,.08,.04],atk:.08,decay:2.0,noise:.10},
+    {w:'flute',h:[.64,.24,.12,.05],atk:.07,decay:2.2,noise:.05,vib:.004},
+    {w:'whistle',h:[.86,.08,.04,.02],atk:.035,decay:2.0,noise:.02,vib:.002},
+    {w:'flute',h:[.78,.14,.06,.03],atk:.04,decay:2.0,noise:.025,vib:.003},
+    // 80-87 Synth leads
+    {w:'square',atk:.006,decay:1.8},
+    {w:'saw',atk:.005,decay:1.6,detune:.003},
+    {w:'saw',atk:.025,decay:1.5,noise:.02},
+    {w:'saw',atk:.004,decay:1.3,noise:.08},
+    {w:'charang',atk:.004,decay:1.2,mod:3.01,mi:2.5},
+    {w:'voice',h:[.62,.26,.18,.10],atk:.03,decay:2.0,vib:.006},
+    {w:'fifths',atk:.01,decay:1.6},
+    {w:'basslead',atk:.008,decay:1.4},
+    // 88-95 Synth pads
+    {w:'pad',atk:.45,decay:5.0,vib:.002,detune:.006},
+    {w:'pad',atk:.30,decay:4.5,vib:.0025,detune:.004},
+    {w:'padsaw',atk:.25,decay:4.0,vib:.002,detune:.008},
+    {w:'choirpad',atk:.35,decay:4.5,vib:.003},
+    {w:'bowed',atk:.55,decay:5.5,vib:.004},
+    {w:'metalpad',atk:.20,decay:3.5,inh:2.71},
+    {w:'halo',atk:.60,decay:6.0,vib:.0015},
+    {w:'sweep',atk:.35,decay:4.0,glide:2.5},
+    // 96-103 Synth FX
+    {w:'rain',atk:.002,decay:1.2,noise:.65,inh:7.2},
+    {w:'fx',atk:.02,decay:3.0,mod:1.01,mi:6.0},
+    {w:'crystal',atk:.002,decay:3.0,inh:3.71},
+    {w:'atmo',atk:.35,decay:6.0,noise:.15,vib:.001},
+    {w:'brightfx',atk:.01,decay:2.5,inh:5.17},
+    {w:'goblin',atk:.004,decay:1.5,mod:2.37,mi:8.0},
+    {w:'echo',atk:.01,decay:3.5,mod:1.003,mi:3.0},
+    {w:'scifi',atk:.01,decay:4.0,mod:.37,mi:12.0},
+    // 104-111 Ethnic
+    {w:'sitar',h:[.66,.24,.14,.08],atk:.004,decay:1.8,inh:2.01},
+    {w:'banjo',h:[.62,.30,.18,.09],atk:.003,decay:.75},
+    {w:'shamisen',h:[.58,.32,.20,.11],atk:.004,decay:1.0,inh:1.5},
+    {w:'koto',h:[.68,.22,.13,.07],atk:.003,decay:1.3,inh:2.0},
+    {w:'kalimba',h:[.70,.24,.12,.06],atk:.003,decay:1.8,inh:2.71},
+    {w:'bagpipe',h:[.70,.25,.15,.09],atk:.12,decay:3.5,vib:.002},
+    {w:'fiddle',h:[.68,.24,.14,.08],atk:.025,decay:2.4,vib:.008},
+    {w:'shanai',h:[.56,.30,.20,.12,.07],atk:.035,decay:2.0,noise:.04,vib:.006},
+    // 112-119 Percussive
+    {w:'bell',h:[.60,.25,.16,.10],atk:.002,decay:1.3,inh:4.2},
+    {w:'agogo',h:[.55,.30,.20,.12],atk:.002,decay:.9,inh:1.7},
+    {w:'steel',h:[.68,.22,.14,.07],atk:.003,decay:1.5,inh:2.01},
+    {w:'wood',h:[.62,.28,.18,.09],atk:.002,decay:.35,inh:3.2},
+    {w:'taiko',h:[.86,.10,.04],atk:.004,decay:.8,inh:1.46},
+    {w:'tom',h:[.78,.16,.06],atk:.004,decay:.7,inh:1.33},
+    {w:'synthdrum',h:[.55,.24,.12],atk:.002,decay:.55,noise:.18},
+    {w:'reverse',h:[.70,.20,.10],atk:.35,decay:.45,reverse:true},
+    // 120-127 Sound effects
+    {w:'noise',atk:.002,decay:.18,noise:1.0},
+    {w:'breath',atk:.02,decay:.45,noise:.8},
+    {w:'seashore',atk:.005,decay:1.4,noise:.95},
+    {w:'bird',atk:.002,decay:.5,mod:5.7,mi:3.5},
+    {w:'phone',atk:.002,decay:.9,mod:1.0,mi:8.0},
+    {w:'helicopter',atk:.01,decay:1.5,mod:12.0,mi:2.0,noise:.15},
+    {w:'applause',atk:.01,decay:1.0,noise:.9},
+    {w:'gunshot',atk:.001,decay:.35,noise:.9,inh:2.2}
+  ];
+
   function gmTimbre(program, phase, freq, age, dur, vel){
     const p=Math.max(0,Math.min(127,program|0));
+    const r=GM_PCM_RECIPES[p] || GM_PCM_RECIPES[0];
     const x=phase/(2*Math.PI);
-    const s=Math.sin(phase), s2=Math.sin(phase*2), s3=Math.sin(phase*3), s4=Math.sin(phase*4), s5=Math.sin(phase*5), s7=Math.sin(phase*7);
+    const s=Math.sin(phase), s2=Math.sin(phase*2), s3=Math.sin(phase*3), s4=Math.sin(phase*4), s5=Math.sin(phase*5);
     const tri=1-4*Math.abs(Math.round(x)-x);
     const saw=2*(x-Math.floor(x+.5));
     const sq=x<0.5?1:-1;
-    const noiseSeed=((Math.floor(age*44100)*1664525 + (p+1)*1013904223)>>>0)/4294967296;
-    const noise=noiseSeed*2-1;
-    const n=p;
-    if(n<8){ // Piano / electric piano / harpsichord / clavinet
-      if(n===0) return .72*s + .20*s2 + .11*s3 + .055*s4 + .025*s7 + .018*Math.sin(phase*6.11)*Math.exp(-age*4.8);
-      if(n===1) return .70*s + .24*s2 + .12*s3 + .06*s4;
-      if(n===2) return .66*s + .28*s2 + .14*s3 + .07*s5;
-      if(n===3) return .55*s + .35*s2 + .18*s3 + .10*s5;
-      if(n===4||n===5) return .72*s + .20*s2 + .14*s3 + .06*s4;
-      if(n===6) return .58*s + .32*s2 + .22*s3 + .12*s4 + .08*s5;
-      return .55*s + .28*s2 + .20*s3 + .12*s5;
+    const seed=((Math.floor(age*44100)*1664525 + (p+1)*1013904223)>>>0)/4294967296;
+    const noise=seed*2-1;
+    const bright=r.bright==null?1:r.bright;
+    const envAge=Math.max(0,age);
+    const attack=r.atk==null?.01:r.atk;
+    const a=envAge<attack ? envAge/Math.max(.0005,attack) : 1;
+    let y=0;
+    switch(r.w){
+      case 'piano': case 'ep': case 'harpsi': case 'clavi': case 'organ': case 'reed': case 'guitar': case 'bass': case 'string': case 'choir': case 'brass': case 'sax': case 'clarinet': case 'flute': case 'whistle': case 'sitar': case 'banjo': case 'shamisen': case 'koto': case 'kalimba': case 'bagpipe': case 'fiddle': case 'shanai':
+        if(r.h){ for(let i=0;i<r.h.length;i++) y+=r.h[i]*Math.sin(phase*(i+1)); }
+        else y=.7*s+.2*s2+.1*s3;
+        break;
+      case 'mallet': case 'bell': case 'vib': case 'dulcimer': case 'harp': case 'timp': case 'pluck': case 'wood': case 'steel': case 'agogo': case 'taiko': case 'tom':
+        y=(r.h||[.7,.25,.12,.06]).reduce((v,h,i)=>v+h*Math.sin(phase*(i+1)),0);
+        y+=.16*Math.sin(phase*(r.inh||2.71))*Math.exp(-envAge*(r.decay||2.5));
+        break;
+      case 'stringsaw': case 'padsaw': case 'saw': case 'sweep': y=.72*saw+.18*s+.10*s2; break;
+      case 'square': y=.82*sq+.12*s+.06*s2; break;
+      case 'pad': y=.42*s+.25*Math.sin(phase*1.997)+.18*Math.sin(phase*.501)+.12*saw; break;
+      case 'choirpad': case 'bowed': case 'halo': y=.52*s+.22*s2+.14*s3+.10*Math.sin(phase*1.003); break;
+      case 'metalpad': y=.42*s+.25*Math.sin(phase*(r.inh||2.71))+.18*s2; break;
+      case 'bassfm': case 'brassfm': case 'charang': case 'goblin': case 'phone': case 'echo': case 'scifi': case 'fx':
+        y=Math.sin(phase + Math.sin(phase*(r.mod||2))* (r.mi||2)); break;
+      case 'fifths': y=.52*Math.sin(phase)+.38*Math.sin(phase*1.5)+.18*Math.sin(phase*2); break;
+      case 'basslead': y=.65*saw+.28*s+.12*s2; break;
+      case 'voice': y=.60*s+.25*s2+.16*s3+.08*s5; break;
+      case 'rain': case 'noise': case 'breath': case 'seashore': case 'applause': case 'gunshot': y=noise; break;
+      case 'atmo': y=.45*s+.25*Math.sin(phase*.503)+.25*noise; break;
+      case 'crystal': case 'brightfx': y=.55*s+.28*Math.sin(phase*(r.inh||3.71))+.16*s3; break;
+      case 'bird': y=Math.sin(phase + Math.sin(age*(r.mod||5))* (r.mi||3)); break;
+      case 'helicopter': y=.55*saw+.25*noise+.20*Math.sin(age*(r.mod||12)); break;
+      case 'reverse': y=.65*s+.22*s2+.12*s3; break;
+      case 'synthdrum': y=.62*s+.20*s2+.18*noise; break;
+      default: y=.75*s+.20*s2+.08*s3;
     }
-    if(n<16){ // chromatic percussion
-      const bells=[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0][n-8];
-      return .55*s + .30*s2 + .18*s3 + .10*s5 + .08*Math.sin(phase*2.71)*Math.exp(-age*7) + bells;
-    }
-    if(n<24){ // organs / accordion / harmonica
-      return .46*s + .22*s2 + .13*s3 + .08*s4 + .05*s5 + .10*tri;
-    }
-    if(n<32){ // guitars
-      return .55*s + .20*s2 + .12*s3 + .07*s4 + .05*tri + .025*noise;
-    }
-    if(n<40){ // basses
-      return .78*s + .18*s2 + .08*s3 + .04*tri;
-    }
-    if(n<48){ // strings / harp / timpani
-      return .62*s + .22*s2 + .12*s3 + .06*s5 + .10*tri;
-    }
-    if(n<56){ // ensembles / choir
-      return .48*s + .24*s2 + .16*s3 + .08*s4 + .12*Math.sin(phase*1.003);
-    }
-    if(n<64){ // brass
-      return .48*s + .30*s2 + .18*s3 + .10*s4 + .05*s5;
-    }
-    if(n<72){ // reeds
-      return .52*s + .20*s2 + .15*s3 + .10*s4 + .08*tri;
-    }
-    if(n<80){ // pipes
-      return .60*s + .20*s2 + .12*s3 + .08*s4;
-    }
-    if(n<88){ // synth leads
-      const base=(n===80||n===81||n===84)?sq:saw;
-      return .65*base + .20*s + .10*s2;
-    }
-    if(n<96){ // synth pads
-      return .42*s + .22*Math.sin(phase*1.997) + .16*Math.sin(phase*.501) + .12*tri;
-    }
-    if(n<104){ // synth FX
-      return .45*noise + .25*Math.sin(phase*(1+age*2)) + .15*s;
-    }
-    if(n<112){ // ethnic
-      return .55*s + .25*s2 + .15*s3 + .12*tri;
-    }
-    if(n<120){ // percussive
-      return .50*noise + .30*s + .18*s2;
-    }
-    return .35*noise + .25*s + .18*s2 + .12*Math.sin(phase*3.17);
+    if(r.noise) y=(1-r.noise)*y+r.noise*noise;
+    if(r.vib) y=Math.sin(phase + Math.sin(envAge*5.1)*r.vib*100);
+    if(r.reverse) y*=Math.min(1,Math.max(0,(dur-envAge)/Math.max(.02,dur*.35)));
+    return y*a*bright;
   }
+
 
   function gmEnvelope(program, age, dur, vel){
     const p=program|0, amp=Math.max(.03,vel/127);
