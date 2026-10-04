@@ -2704,7 +2704,7 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
   }
   song.tracks.forEach((tr,ti)=>{
     const audible=anySolo?tr.solo:!tr.muted;
-    const type=tr.instrumentType==='fm'?6:tr.instrumentType==='synth'?5:(tr.instrument===-1?4:(categoryFor(tr.instrument)==='bass'?1:categoryFor(tr.instrument)==='pad'?3:2));
+    const type=tr.instrumentType==='fm'?6:tr.instrumentType==='synth'?5:2;
     let wave=null;
     if(type===5) wave=(getActiveWaveformSamples(tr)||defaultRetroWaveform()).slice();
     const pan=(tr.pan||0)/100, a=(pan+1)*Math.PI/4;
@@ -3105,9 +3105,10 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
       // Default GM preset: use the SAME cached SF2 bank as the original app,
       // but mix its PCM samples directly. No AudioBufferSourceNode is created
       // for the note, and the SF2 sample data remains shared in memory.
-      if(kind===2 && tr.instrument>=0 && tr.instrument<128 && sf2Ready){
-        const program=tr.instrument|0;
-        const preset=sf2.findPreset(0,program);
+      if(kind===2 && sf2Ready && (tr.instrument===-1 || (tr.instrument>=0 && tr.instrument<128))){
+        const isDrum=tr.instrument===-1;
+        const program=isDrum?0:(tr.instrument|0);
+        const preset=sf2.findPreset(isDrum?128:0,program);
         const vp=preset ? sf2VoiceParams(preset,n.p,vel) : null;
         if(vp){
           const params=sf2ComputeParams(vp.instGens,vp.presetGens);
@@ -3177,7 +3178,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           // Coefficients are refreshed periodically when an envelope/LFO changes
           // the cutoff; this avoids a per-sample coefficient calculation.
           let fx1=0,fx2=0,fy1=0,fy2=0, fLast=-1, qLast=-1;
-          let b0=1,b1=0,b2=0,a1=0,a2=0,filterOn=false;
+          let b0=1,b1=0,b2=0,a1=0,a2=0,filterOn=(vp.instGens[8]!==undefined || vp.presetGens[8]!==undefined);
           const setFilter=(cutoff,q)=>{
             const fc=Math.max(20,Math.min(sr*.47,cutoff));
             const qq=Math.max(.25,Math.min(18,q));
@@ -3243,11 +3244,11 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
             // Filter cutoff in cents. Mod LFO/env destinations are additive in cents.
             let envFilter=0;
             if(age>=peakTime && age<decEnd) envFilter=1-(age-holdEnd)/Math.max(.0005,decay);
-            const filterCents=params.filterFc + modFilter + params.modLfoToFilter*modLfo + params.modEnvToFilter*envFilter;
-            const cutoff=8.176*Math.pow(2,filterCents/1200);
-            const q=.707*Math.pow(10,params.filterQ/200);
-            setFilter(cutoff,q);
             if(filterOn){
+              const filterCents=params.filterFc + modFilter + params.modLfoToFilter*modLfo + params.modEnvToFilter*envFilter;
+              const cutoff=8.176*Math.pow(2,filterCents/1200);
+              const q=.707*Math.pow(10,params.filterQ/200);
+              setFilter(cutoff,q);
               const y=b0*smp+b1*fx1+b2*fx2-a1*fy1-a2*fy2;
               fx2=fx1; fx1=smp; fy2=fy1; fy1=y; smp=y;
             }
