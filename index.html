@@ -3258,10 +3258,10 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         // feedback gain when pitch-bend/vibrato changes.
         const p=tr.presets[n.f]||tr.presets[0];
         if(!p) continue;
-        const ops=p.operators||[];
+        const ops=p.ops||[];
         const algo=FM_ALGORITHMS[p.algorithm||0]||{mods:[],carriers:[]};
-        const order=ops.map((_,i)=>i);
-        const carriers=algo.carriers||[];
+        const order=p.order||ops.map((_,i)=>i);
+        const carriers=p.carriers||[];
         const phases=new Float64Array(ops.length);
         const prevOut=new Float64Array(ops.length);
         const tmpFreq=new Float64Array(ops.length);
@@ -3288,17 +3288,13 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           // rather than initializing oscillator phase to the phase value.
           phaseDelay[oi]=(op.phase||0)/(2*Math.PI*Math.max(1,bf));
         }
-        for(let k=0;k<algo.mods.length;k++){
-          const pair=algo.mods[k];
-          const mi=pair[0], di=pair[1];
-          if(mi>=0 && mi<ops.length && di>=0 && di<ops.length) incoming[di].push(mi);
-        }
+        for(let di=0;di<ops.length;di++) incoming[di]=(p.incoming&&p.incoming[di])||[];
 
-        const env=p.envelope||defaultFmEnvelope();
-        const atk=Math.max(.002,env.attack);
-        const dec=Math.max(.002,env.decay);
-        const sus=Math.max(0,Math.min(1,env.sustain));
-        const rel=Math.max(.01,env.release);
+        const env=p.env||[.01,.1,.7,.3];
+        const atk=Math.max(.002,env[0]);
+        const dec=Math.max(.002,env[1]);
+        const sus=Math.max(0,Math.min(1,env[2]));
+        const rel=Math.max(.01,env[3]);
         const peak=Math.max(.05,vel/127);
         const relStart=Math.max(dur,atk+dec);
         const renderEnd=Math.min(totalFrames,Math.ceil(start+(relStart+rel+.05)*sr));
