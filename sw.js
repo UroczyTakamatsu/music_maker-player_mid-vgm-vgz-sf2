@@ -1,4 +1,4 @@
-const CACHE_NAME = "midsequer2-pwa-v4";
+const CACHE_NAME = "midsequer2-pwa-v3";
 const APP_SHELL = ["./", "./index.html", "./icon.svg"];
 
 self.addEventListener("install", event => {
@@ -21,9 +21,24 @@ self.addEventListener("fetch", event => {
 
   const url = new URL(event.request.url);
 
-  // Always fetch manifest from network so old orientation settings cannot be cached.
+  // Always fetch the manifest from network.
   if (url.pathname.endsWith("/manifest.json")) {
     event.respondWith(fetch(event.request, {cache: "no-store"}));
+    return;
+  }
+
+  // HTML is network-first. This prevents an updated app UI (including new
+  // instrument/SF2 controls) from being hidden by an old app-shell cache.
+  if (url.pathname.endsWith("/index.html") || url.pathname.endsWith("/")) {
+    event.respondWith(
+      fetch(event.request, {cache: "no-store"}).then(response => {
+        if (response && response.status === 200) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
     return;
   }
 
