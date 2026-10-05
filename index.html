@@ -3124,7 +3124,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         // match this app's editor/playback implementation (sf2Voice()).
         // Keeping this exact resolver also fixes velocity/key-layered patches
         // that sounded radically different after export.
-        const vp=preset ? sf2VoiceParams(preset,n.p,vel) : null;
+        const vp=preset ? sf2VoiceParams(preset,n.p,vel,font) : null;
         if(vp){
           const params=sf2ComputeParams(vp.instGens,vp.presetGens);
           const sample=vp.sample, src=font.sampleData;
@@ -4356,30 +4356,33 @@ function sf2CombineGenerators(instGlobal, instZone, presetGlobal, presetZone){
   out[43]={lo:r.klo,hi:r.khi}; out[44]={lo:r.vlo,hi:r.vhi};
   return out;
 }
-function sf2VoiceParamsAll(preset, note, vel){
+function sf2VoiceParamsAll(preset, note, vel, font=sf2){
+  // IMPORTANT: preset, instruments, and samples must always come from the same SoundFont.
+  // Do not read the global `sf2` here when a custom font is supplied; MIDI note/pitch
+  // (`note`) and instrument/program (`preset`) are independent concepts.
   const ps=sf2SplitGlobal(preset.zones,41);
   const voices=[];
   for(const pZone of ps.specific){
     if(!sf2ZoneMatches(pZone,note,vel)) continue;
     const pG=sf2ZoneGens(ps.global), pZ=sf2ZoneGens(pZone);
     const instIdx=(pZ[41]!==undefined?pZ[41]:pG[41]);
-    if(instIdx===undefined || !sf2.instruments[instIdx]) continue;
-    const inst=sf2.instruments[instIdx], is=sf2SplitGlobal(inst.zones,53);
+    if(instIdx===undefined || !font || !font.instruments || !font.instruments[instIdx]) continue;
+    const inst=font.instruments[instIdx], is=sf2SplitGlobal(inst.zones,53);
     for(const iZone of is.specific){
       if(!sf2ZoneMatches(iZone,note,vel)) continue;
       const iG=sf2ZoneGens(is.global), iZ=sf2ZoneGens(iZone);
       const sampleIdx=iZ[53];
-      if(sampleIdx===undefined || !sf2.samples[sampleIdx]) continue;
+      if(sampleIdx===undefined || !font.samples || !font.samples[sampleIdx]) continue;
       const ranges=sf2ResolveRanges(iZ,pZ);
       if(note<ranges.klo||note>ranges.khi||vel<ranges.vlo||vel>ranges.vhi) continue;
       const gens=sf2CombineGenerators(is.global,iZone,ps.global,pZone);
-      voices.push({instGens:gens,presetGens:{},mods:[...sf2ZoneMods(ps.global),...sf2ZoneMods(pZone),...sf2ZoneMods(is.global),...sf2ZoneMods(iZone)],sample:sf2.samples[sampleIdx]});
+      voices.push({instGens:gens,presetGens:{},mods:[...sf2ZoneMods(ps.global),...sf2ZoneMods(pZone),...sf2ZoneMods(is.global),...sf2ZoneMods(iZone)],sample:font.samples[sampleIdx]});
     }
   }
   return voices;
 }
-function sf2VoiceParams(preset, note, vel){
-  const all=sf2VoiceParamsAll(preset,note,vel);
+function sf2VoiceParams(preset, note, vel, font=sf2){
+  const all=sf2VoiceParamsAll(preset,note,vel,font);
   return all.length?all[0]:null;
 }
 function sf2ComputeParams(instGens, presetGens){
@@ -4455,7 +4458,7 @@ function sf2Voice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato)
   const bank=info.bank, program=info.program, preset=info.preset;
   const sf2ForVoice=info.font;
   if(!preset) return false;
-  const vp = sf2VoiceParams(preset, note, vel);
+  const vp = sf2VoiceParams(preset, note, vel, sf2ForVoice);
   if(!vp) return false;
   const params = sf2ComputeParams(vp.instGens, vp.presetGens);
   const sample = vp.sample;
