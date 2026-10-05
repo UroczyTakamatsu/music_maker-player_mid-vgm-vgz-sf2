@@ -2710,7 +2710,7 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
     let wave=null;
     if(type===5) wave=(getActiveWaveformSamples(tr)||defaultRetroWaveform()).slice();
     const pan=(tr.pan||0)/100, a=(pan+1)*Math.PI/4;
-    const out={type,instrument:tr.instrument,gain:audible?tr.volume/127:0,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0};
+    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',gain:audible?tr.volume/127:0,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0};
     tr.notes.forEach(nt=>{
       const endTick=effectiveNoteEndTick(ti,nt);
       const when=leadSeconds+tickToSeconds(nt.startTick);
