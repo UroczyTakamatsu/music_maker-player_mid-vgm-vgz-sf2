@@ -3251,55 +3251,88 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           }
         }
       }else if(kind===6){
-        // FM Synth: mirror buildFmGraph() exactly in the PCM renderer.
-        // The live engine keeps all six oscillators running through the
-        // release stage; the old renderer stopped at note-off, which chopped
-        // the envelope and made FM patches sound very different or silent
-        // on short notes.
+        // FM Synth renderer. Keep the hot loop allocation-free and mirror the
+        // WebAudio FM graph: operator pitch is pitchMul-scaled, while FM
+        // modulation/feedback gains are fixed from the operator's base freq.
+        // This is important because buildFmGraph() does NOT scale modGain or
+        // feedback gain when pitch-bend/vibrato changes.
         const p=tr.presets[n.f]||tr.presets[0];
         if(!p) continue;
-        const ops=p.ops||[];
-        const phases=ops.map(o=>o.phase||0);
-        const prevOut=ops.map(()=>0);
-        const tmpFreq=ops.map(()=>0);
-        const fmOut=ops.map(()=>0);
-        const incoming=p.incoming||[];
-        const order=p.order||ops.map((_,i)=>i);
-        const carriers=p.carriers||[];
-        const env=p.env||[.01,.1,.7,.3];
-        const atk=Math.max(.002,env[0]);
-        const dec=Math.max(.002,env[1]);
-        const sus=Math.max(0,Math.min(1,env[2]));
-        const rel=Math.max(.01,env[3]);
+        const ops=p.operators||[];
+        const algo=FM_ALGORITHMS[p.algorithm||0]||{mods:[],carriers:[]};
+        const order=ops.map((_,i)=>i);
+        const carriers=algo.carriers||[];
+        const phases=new Float64Array(ops.length);
+        const prevOut=new Float64Array(ops.length);
+        const tmpFreq=new Float64Array(ops.length);
+        const fmOut=new Float64Array(ops.length);
+        const baseOpFreq=new Float64Array(ops.length);
+        const modGainHz=new Float64Array(ops.length);
+        const fbGainHz=new Float64Array(ops.length);
+        const phaseDelay=new Float64Array(ops.length);
+        const started=new Uint8Array(ops.length);
+        const incoming=Array.from({length:ops.length},()=>[]);
+
+        // The live graph starts each oscillator at base frequency and then
+        // connects modulation into the destination frequency. Build the same
+        // routing once, outside the per-sample loop.
+        for(let oi=0;oi<ops.length;oi++){
+          const op=ops[oi]||{};
+          const ratio=op.ratio||1;
+          const level=op.level==null?1:op.level;
+          const bf=pitch*ratio;
+          baseOpFreq[oi]=bf;
+          modGainHz[oi]=bf*level;
+          fbGainHz[oi]=op.feedback?bf*.5*level:0;
+          // buildFmGraph() delays oscillator.start() by phase/(2*pi*f),
+          // rather than initializing oscillator phase to the phase value.
+          phaseDelay[oi]=(op.phase||0)/(2*Math.PI*Math.max(1,bf));
+        }
+        for(let k=0;k<algo.mods.length;k++){
+          const pair=algo.mods[k];
+          const mi=pair[0], di=pair[1];
+          if(mi>=0 && mi<ops.length && di>=0 && di<ops.length) incoming[di].push(mi);
+        }
+
+        const env=p.envelope||defaultFmEnvelope();
+        const atk=Math.max(.002,env.attack);
+        const dec=Math.max(.002,env.decay);
+        const sus=Math.max(0,Math.min(1,env.sustain));
+        const rel=Math.max(.01,env.release);
         const peak=Math.max(.05,vel/127);
         const relStart=Math.max(dur,atk+dec);
         const renderEnd=Math.min(totalFrames,Math.ceil(start+(relStart+rel+.05)*sr));
+        const twoPiOverSr=2*Math.PI/sr;
+
         for(let fr=start;fr<renderEnd;fr++){
           const age=(fr-start)/sr;
           const pm=pitchMulAt(n,age);
-          // WebAudio oscillator phase is represented here directly.  The
-          // editor's phase value is expressed in radians, so initialise the
-          // oscillator with exactly that phase rather than treating it as a
-          // frequency offset.
+
+          // Calculate all operator frequencies first, matching the graph's
+          // modulation order. Modulation amount itself remains at base Hz.
           for(let q=0;q<order.length;q++){
-            const oi=order[q], op=ops[oi];
-            let f=pitch*(op.ratio||1)*pm;
-            const inc=incoming[oi]||[];
-            for(let k=0;k<inc.length;k++){
-              const mi=inc[k], mop=ops[mi];
-              f += fmOut[mi]*(pitch*(mop.ratio||1)*(mop.level==null?1:mop.level));
-            }
-            if(op.feedback){
-              f += prevOut[oi]*(pitch*(op.ratio||1)*.5*(op.level==null?1:op.level));
-            }
-            tmpFreq[oi]=Math.max(0,f);
+            const oi=order[q], op=ops[oi]||{};
+            const ratio=op.ratio||1;
+            let f=baseOpFreq[oi]*pm;
+            const inc=incoming[oi];
+            for(let k=0;k<inc.length;k++) f += fmOut[inc[k]]*modGainHz[inc[k]];
+            if(fbGainHz[oi]) f += prevOut[oi]*fbGainHz[oi];
+            tmpFreq[oi]=f>0?f:0;
           }
-          for(let oi=0;oi<ops.length;oi++){
-            phases[oi]=(phases[oi]+2*Math.PI*tmpFreq[oi]/sr)%(2*Math.PI);
-            fmOut[oi]=Math.sin(phases[oi]);
-          }
-          for(let oi=0;oi<ops.length;oi++) if(ops[oi].feedback) prevOut[oi]=fmOut[oi];
+
           let smp=0;
+          // Oscillators that have not reached their WebAudio start time emit
+          // silence and do not advance phase. Once started, phase begins at 0.
+          for(let oi=0;oi<ops.length;oi++){
+            if(!started[oi]){
+              if(age>=phaseDelay[oi]) started[oi]=1;
+              else { fmOut[oi]=0; continue; }
+            }
+            fmOut[oi]=Math.sin(phases[oi]);
+            phases[oi]=(phases[oi]+twoPiOverSr*tmpFreq[oi])%(2*Math.PI);
+          }
+          for(let oi=0;oi<ops.length;oi++) if(ops[oi] && ops[oi].feedback) prevOut[oi]=fmOut[oi];
+
           for(let k=0;k<carriers.length;k++){
             const ci=carriers[k], op=ops[ci];
             if(op) smp+=fmOut[ci]*(op.level==null?1:op.level)*.3;
@@ -3309,8 +3342,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           else if(age<atk+dec) e=peak+(peak*sus-peak)*((age-atk)/dec);
           else if(age<relStart) e=peak*sus;
           else if(age<relStart+rel) e=peak*sus*Math.pow(.0001/Math.max(.0001,peak*sus),(age-relStart)/rel);
-          const x=smp*e;
-          addSample(fr,x,panL,panR);
+          addSample(fr,smp*e,panL,panR);
         }
       }else if(kind===5){
         let phase=0;
