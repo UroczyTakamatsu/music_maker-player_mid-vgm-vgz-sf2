@@ -2575,7 +2575,7 @@ class MidiLowLevelMixer extends AudioWorkletProcessor {
     return wave[i]*(1-f)+wave[(i+1)%n]*f;
   }
 
-  _fmSample(v, pitchMul, dt){
+  _fmSample(v, pitchMul, dt, ageNow){
     const p=v.preset, ops=p.ops, order=p.order, n=ops.length;
     for(let oi=0;oi<n;oi++) v.done[oi]=0;
     for(let q=0;q<order.length;q++){
@@ -2588,12 +2588,20 @@ class MidiLowLevelMixer extends AudioWorkletProcessor {
       }
       if(op.feedback) f += v.feedback[i]*(v.baseFreq*(op.ratio||1)*.5*(op.level==null?1:op.level));
       v.tmpFreq[i]=Math.max(0,f);
-      v.fmOut[i]=Math.sin(v.phases[i]);
-      v.done[i]=1;
+      // Match WebAudio OscillatorNode: each operator with an initial phase
+      // is started after phase/(2*pi*frequency), rather than beginning with
+      // an already-advanced phase at t=0.
+      const phaseDelay=(ops[i].phase||0)/(2*Math.PI*Math.max(1, v.baseFreq*(op.ratio||1)));
+      const started=ageNow>=phaseDelay;
+      v.fmOut[i]=started?Math.sin(v.phases[i]):0;
+      v.done[i]=started?1:0;
     }
     for(let i=0;i<n;i++){
-      v.phases[i]=(v.phases[i]+2*Math.PI*v.tmpFreq[i]*dt)%(2*Math.PI);
-      if(ops[i].feedback) v.feedback[i]=v.fmOut[i];
+      const phaseDelay=(ops[i].phase||0)/(2*Math.PI*Math.max(1,v.baseFreq*(ops[i].ratio||1)));
+      if(ageNow>=phaseDelay) {
+        v.phases[i]=(v.phases[i]+2*Math.PI*v.tmpFreq[i]*dt)%(2*Math.PI);
+        if(ops[i].feedback) v.feedback[i]=v.fmOut[i];
+      }
     }
     let s=0;
     for(let k=0;k<p.carriers.length;k++){
@@ -2613,7 +2621,7 @@ class MidiLowLevelMixer extends AudioWorkletProcessor {
     if(v.kind===6){
       v.preset=tr.presets[n.f]||tr.presets[0];
       const ops=v.preset.ops;
-      v.phases=ops.map(o=>o.phase||0);
+      v.phases=ops.map(()=>0);
       v.feedback=ops.map(()=>0);
       v.tmpFreq=ops.map(()=>0);
       v.fmOut=ops.map(()=>0);
@@ -2652,7 +2660,7 @@ class MidiLowLevelMixer extends AudioWorkletProcessor {
         const age=(fr-v.start)/this.sr;
         const pm=this._pitchInfo(v,age);
         let s=0;
-        if(v.kind===6) s=this._fmSample(v,pm,1/this.sr);
+        if(v.kind===6) s=this._fmSample(v,pm,1/this.sr,age);
         else if(v.kind===5){
           const f=v.pitch*pm;
           v.phase=(v.phase+2*Math.PI*f/this.sr)%(2*Math.PI);
