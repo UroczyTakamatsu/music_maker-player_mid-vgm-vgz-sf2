@@ -3243,8 +3243,14 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           }
         }
       }else if(kind===6){
+        // FM Synth: mirror buildFmGraph() exactly in the PCM renderer.
+        // The live engine keeps all six oscillators running through the
+        // release stage; the old renderer stopped at note-off, which chopped
+        // the envelope and made FM patches sound very different or silent
+        // on short notes.
         const p=tr.presets[n.f]||tr.presets[0];
-        const ops=p.ops;
+        if(!p) continue;
+        const ops=p.ops||[];
         const phases=ops.map(o=>o.phase||0);
         const prevOut=ops.map(()=>0);
         const tmpFreq=ops.map(()=>0);
@@ -3252,10 +3258,21 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         const incoming=p.incoming||[];
         const order=p.order||ops.map((_,i)=>i);
         const carriers=p.carriers||[];
-        const env=p.env;
-        for(let fr=start;fr<end;fr++){
+        const env=p.env||[.01,.1,.7,.3];
+        const atk=Math.max(.002,env[0]);
+        const dec=Math.max(.002,env[1]);
+        const sus=Math.max(0,Math.min(1,env[2]));
+        const rel=Math.max(.01,env[3]);
+        const peak=Math.max(.05,vel/127);
+        const relStart=Math.max(dur,atk+dec);
+        const renderEnd=Math.min(totalFrames,Math.ceil(start+(relStart+rel+.05)*sr));
+        for(let fr=start;fr<renderEnd;fr++){
           const age=(fr-start)/sr;
           const pm=pitchMulAt(n,age);
+          // WebAudio oscillator phase is represented here directly.  The
+          // editor's phase value is expressed in radians, so initialise the
+          // oscillator with exactly that phase rather than treating it as a
+          // frequency offset.
           for(let q=0;q<order.length;q++){
             const oi=order[q], op=ops[oi];
             let f=pitch*(op.ratio||1)*pm;
@@ -3270,7 +3287,6 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
             tmpFreq[oi]=Math.max(0,f);
           }
           for(let oi=0;oi<ops.length;oi++){
-            const op=ops[oi];
             phases[oi]=(phases[oi]+2*Math.PI*tmpFreq[oi]/sr)%(2*Math.PI);
             fmOut[oi]=Math.sin(phases[oi]);
           }
@@ -3280,7 +3296,12 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
             const ci=carriers[k], op=ops[ci];
             if(op) smp+=fmOut[ci]*(op.level==null?1:op.level)*.3;
           }
-          const x=smp*envAt(kind,age,dur,vel,env)*(vel/127);
+          let e=0;
+          if(age<atk) e=peak*(age/atk);
+          else if(age<atk+dec) e=peak+(peak*sus-peak)*((age-atk)/dec);
+          else if(age<relStart) e=peak*sus;
+          else if(age<relStart+rel) e=peak*sus*Math.pow(.0001/Math.max(.0001,peak*sus),(age-relStart)/rel);
+          const x=smp*e;
           addSample(fr,x,panL,panR);
         }
       }else if(kind===5){
