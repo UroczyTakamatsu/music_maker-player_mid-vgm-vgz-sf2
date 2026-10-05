@@ -3251,45 +3251,21 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           }
         }
       }else if(kind===6){
-        // FM Synth renderer. Keep the hot loop allocation-free and mirror the
-        // WebAudio FM graph: operator pitch is pitchMul-scaled, while FM
-        // modulation/feedback gains are fixed from the operator's base freq.
-        // This is important because buildFmGraph() does NOT scale modGain or
-        // feedback gain when pitch-bend/vibrato changes.
+        // FM Synth PCM renderer.
+        // Keep the original, known-good preset representation (ops/order/
+        // incoming/carriers/env).  Only the scratch arrays are typed arrays;
+        // the FM math intentionally stays identical to the working renderer.
         const p=tr.presets[n.f]||tr.presets[0];
         if(!p) continue;
         const ops=p.ops||[];
-        const algo=FM_ALGORITHMS[p.algorithm||0]||{mods:[],carriers:[]};
-        const order=p.order||ops.map((_,i)=>i);
+        const count=ops.length;
+        const phases=new Float64Array(count);
+        const prevOut=new Float64Array(count);
+        const tmpFreq=new Float64Array(count);
+        const fmOut=new Float64Array(count);
+        const incoming=p.incoming||[];
+        const order=p.order||Array.from({length:count},(_,i)=>i);
         const carriers=p.carriers||[];
-        const phases=new Float64Array(ops.length);
-        const prevOut=new Float64Array(ops.length);
-        const tmpFreq=new Float64Array(ops.length);
-        const fmOut=new Float64Array(ops.length);
-        const baseOpFreq=new Float64Array(ops.length);
-        const modGainHz=new Float64Array(ops.length);
-        const fbGainHz=new Float64Array(ops.length);
-        const phaseDelay=new Float64Array(ops.length);
-        const started=new Uint8Array(ops.length);
-        const incoming=Array.from({length:ops.length},()=>[]);
-
-        // The live graph starts each oscillator at base frequency and then
-        // connects modulation into the destination frequency. Build the same
-        // routing once, outside the per-sample loop.
-        for(let oi=0;oi<ops.length;oi++){
-          const op=ops[oi]||{};
-          const ratio=op.ratio||1;
-          const level=op.level==null?1:op.level;
-          const bf=pitch*ratio;
-          baseOpFreq[oi]=bf;
-          modGainHz[oi]=bf*level;
-          fbGainHz[oi]=op.feedback?bf*.5*level:0;
-          // buildFmGraph() delays oscillator.start() by phase/(2*pi*f),
-          // rather than initializing oscillator phase to the phase value.
-          phaseDelay[oi]=(op.phase||0)/(2*Math.PI*Math.max(1,bf));
-        }
-        for(let di=0;di<ops.length;di++) incoming[di]=(p.incoming&&p.incoming[di])||[];
-
         const env=p.env||[.01,.1,.7,.3];
         const atk=Math.max(.002,env[0]);
         const dec=Math.max(.002,env[1]);
@@ -3298,41 +3274,50 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         const peak=Math.max(.05,vel/127);
         const relStart=Math.max(dur,atk+dec);
         const renderEnd=Math.min(totalFrames,Math.ceil(start+(relStart+rel+.05)*sr));
-        const twoPiOverSr=2*Math.PI/sr;
+        const phaseStep=2*Math.PI/sr;
+
+        // Preserve the existing renderer's phase convention.  This is
+        // deliberately not changed here: changing phase initialization was
+        // what caused FM patches to become silent in the previous revision.
+        for(let oi=0;oi<count;oi++) phases[oi]=ops[oi].phase||0;
 
         for(let fr=start;fr<renderEnd;fr++){
           const age=(fr-start)/sr;
           const pm=pitchMulAt(n,age);
 
-          // Calculate all operator frequencies first, matching the graph's
-          // modulation order. Modulation amount itself remains at base Hz.
+          // Same FM calculation as the original working renderer.
           for(let q=0;q<order.length;q++){
-            const oi=order[q], op=ops[oi]||{};
-            const ratio=op.ratio||1;
-            let f=baseOpFreq[oi]*pm;
-            const inc=incoming[oi];
-            for(let k=0;k<inc.length;k++) f += fmOut[inc[k]]*modGainHz[inc[k]];
-            if(fbGainHz[oi]) f += prevOut[oi]*fbGainHz[oi];
+            const oi=order[q], op=ops[oi];
+            const baseOpFreq=pitch*(op.ratio||1);
+            let f=baseOpFreq*pm;
+            const inc=incoming[oi]||[];
+            for(let k=0;k<inc.length;k++){
+              const mi=inc[k], mop=ops[mi];
+              const modBaseFreq=pitch*(mop.ratio||1);
+              f += fmOut[mi]*(modBaseFreq*(mop.level==null?1:mop.level));
+            }
+            if(op.feedback){
+              // WebAudio feedback is a one-sample delayed signal whose gain is
+              // based on the oscillator's base frequency. Keep the feedback
+              // coefficient independent of pitch modulation so the carrier
+              // pitch does not acquire an unintended detune.
+              f += prevOut[oi]*(pitch*(op.ratio||1)*.5*(op.level==null?1:op.level));
+            }
             tmpFreq[oi]=f>0?f:0;
           }
 
-          let smp=0;
-          // Oscillators that have not reached their WebAudio start time emit
-          // silence and do not advance phase. Once started, phase begins at 0.
-          for(let oi=0;oi<ops.length;oi++){
-            if(!started[oi]){
-              if(age>=phaseDelay[oi]) started[oi]=1;
-              else { fmOut[oi]=0; continue; }
-            }
+          for(let oi=0;oi<count;oi++){
+            phases[oi]=(phases[oi]+phaseStep*tmpFreq[oi])%(2*Math.PI);
             fmOut[oi]=Math.sin(phases[oi]);
-            phases[oi]=(phases[oi]+twoPiOverSr*tmpFreq[oi])%(2*Math.PI);
           }
-          for(let oi=0;oi<ops.length;oi++) if(ops[oi] && ops[oi].feedback) prevOut[oi]=fmOut[oi];
+          for(let oi=0;oi<count;oi++) if(ops[oi].feedback) prevOut[oi]=fmOut[oi];
 
+          let smp=0;
           for(let k=0;k<carriers.length;k++){
             const ci=carriers[k], op=ops[ci];
             if(op) smp+=fmOut[ci]*(op.level==null?1:op.level)*.3;
           }
+
           let e=0;
           if(age<atk) e=peak*(age/atk);
           else if(age<atk+dec) e=peak+(peak*sus-peak)*((age-atk)/dec);
@@ -3404,11 +3389,10 @@ async function legacyOfflineRender(totalSeconds, sampleRate, leadSeconds){
     const dur=Math.max(.01,tickSpanSeconds(nt.startTick,effectiveNoteEndTick(ti,nt)));
     triggerNote(ti,when,nt.pitch,nt.velocity??100,dur,false,nt.pitchCurve,resolveVibratoHz(nt.vibrato,nt.startTick),nt.startTick);
   }));
-  for(let i=1;i<40;i++){
-    const t=totalSeconds*i/40;
-    offlineCtx.suspend(t).then(()=>{if(!exportCancelled)setExportProgress('音声を生成中...',i/40);offlineCtx.resume();});
-  }
-  setExportProgress('音声を生成中...',0);
+  // Avoid dozens of suspend/resume boundaries: they add overhead and are not
+  // needed for correctness. The browser can run the OfflineAudioContext at
+  // full speed.
+  setExportProgress('音声を生成中...',.05);
   try{return await offlineCtx.startRendering();}
   finally{actx=realActx;masterGain=realMaster;trackNodes=realTrackNodes;periodicWaveCache=savedWaveCache;try{offlineCtx.close();}catch(e){}}
 }
@@ -3432,10 +3416,23 @@ document.getElementById('exportAudioGo').onclick=async ()=>{
     const trailSeconds=trailTicks/PPQ*(60/tempoAtTick(contentEndTick));
     const totalSeconds=Math.max(.5,leadSeconds+contentSeconds+trailSeconds);
     const sampleRate=44100;
-    let rendered=await renderLowLevelMix(totalSeconds,sampleRate,leadSeconds);
-    if(!rendered){
-      setExportProgress('互換レンダラーに切り替え中...',.02);
+    // FM must be rendered by the same Web Audio graph used for live playback.
+    // The low-level PCM FM integrator can accumulate a small pitch error because
+    // Web Audio applies oscillator/AudioParam modulation at the audio-engine
+    // rate and handles operator phase/start timing internally.  For FM songs,
+    // use OfflineAudioContext so exported pitch is bit-for-bit based on the
+    // same buildFmGraph() path. Non-FM songs keep the fast low-level renderer.
+    const hasFmTrack=song.tracks.some(t=>t.instrumentType==='fm' && t.notes && t.notes.length);
+    let rendered;
+    if(hasFmTrack){
+      setExportProgress('FM SynthをWeb Audioと同じ方式でレンダリング中...',.02);
       rendered=await legacyOfflineRender(totalSeconds,sampleRate,leadSeconds);
+    }else{
+      rendered=await renderLowLevelMix(totalSeconds,sampleRate,leadSeconds);
+      if(!rendered){
+        setExportProgress('互換レンダラーに切り替え中...',.02);
+        rendered=await legacyOfflineRender(totalSeconds,sampleRate,leadSeconds);
+      }
     }
     if(exportCancelled){closeOverlay('exportProgressOverlay');showToast('書き出しをキャンセルしました');return;}
     const filenameBase=song.name.replace(/[\\[\\]]/g,'')||'song';
