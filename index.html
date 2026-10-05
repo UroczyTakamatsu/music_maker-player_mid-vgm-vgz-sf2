@@ -3389,12 +3389,45 @@ async function legacyOfflineRender(totalSeconds, sampleRate, leadSeconds){
     const dur=Math.max(.01,tickSpanSeconds(nt.startTick,effectiveNoteEndTick(ti,nt)));
     triggerNote(ti,when,nt.pitch,nt.velocity??100,dur,false,nt.pitchCurve,resolveVibratoHz(nt.vibrato,nt.startTick),nt.startTick);
   }));
-  // Avoid dozens of suspend/resume boundaries: they add overhead and are not
-  // needed for correctness. The browser can run the OfflineAudioContext at
-  // full speed.
+  // Keep the exact same OfflineAudioContext rendering path, but briefly
+  // suspend it at coarse intervals so the UI can receive progress updates.
+  // These are intentionally sparse (500ms of audio per update) to keep the
+  // rendering overhead small while making the progress bar visibly advance.
   setExportProgress('音声を生成中...',.05);
-  try{return await offlineCtx.startRendering();}
-  finally{actx=realActx;masterGain=realMaster;trackNodes=realTrackNodes;periodicWaveCache=savedWaveCache;try{offlineCtx.close();}catch(e){}}
+  let progressTimerActive=true;
+  const progressStep=.5;
+  let progressTime=progressStep;
+  const pumpProgress=async()=>{
+    if(!progressTimerActive || progressTime>=totalSeconds) return;
+    const t=Math.min(progressTime,Math.max(0,totalSeconds-0.001));
+    try{
+      await offlineCtx.suspend(t);
+      if(!progressTimerActive) return;
+      setExportProgress('音声を生成中...',.05+.89*(t/Math.max(.001,totalSeconds)));
+      progressTime+=progressStep;
+      if(progressTime<totalSeconds){
+        await offlineCtx.resume();
+        // Schedule the next checkpoint only after resume, avoiding a large
+        // queue of suspend promises and keeping memory/overhead negligible.
+        pumpProgress();
+      }else{
+        await offlineCtx.resume();
+      }
+    }catch(e){
+      // Some browsers reject suspend/resume during teardown; rendering itself
+      // remains valid, so simply stop the progress pump.
+    }
+  };
+  pumpProgress();
+  try{
+    const rendered=await offlineCtx.startRendering();
+    progressTimerActive=false;
+    setExportProgress('音声の生成完了...',.94);
+    return rendered;
+  }finally{
+    progressTimerActive=false;
+    actx=realActx;masterGain=realMaster;trackNodes=realTrackNodes;periodicWaveCache=savedWaveCache;try{offlineCtx.close();}catch(e){}
+  }
 }
 
 document.getElementById('exportAudioGo').onclick=async ()=>{
