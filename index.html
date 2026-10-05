@@ -266,6 +266,7 @@
       <div class="menurow" id="projRename">プロジェクト名変更</div>
       <input type="file" id="fileInput" accept="application/json" style="display:none">
       <input type="file" id="midiFileInput" accept=".mid,.midi,audio/midi" style="display:none">
+      <input type="file" id="sf2FileInput" accept=".sf2,audio/x-soundfont" style="display:none">
     </div>
     <div class="foot"><button data-close="projectOverlay">閉じる</button></div>
   </div>
@@ -721,6 +722,7 @@ function effectiveNoteEndTick(trackIdx, nt){
 function newTrack(i){
   return { id:i, name:'Track '+(i+1), instrument: i===9? -1 : 0, instrumentType:'preset',
     synthMode:'preset', synthPresetIdx:3, synthCustomSlot:1,
+    sf2Key:null, sf2Name:null, sf2Bank:0, sf2Program:0,
     fmMemorySlot:1, timbreEvents:[], // FM Synth: which of the 16 project-wide memory slots this track uses, plus mid-track switch events
     volume:100, pan:0, notes:[], muted:false, solo:false };
   // instrument -1 == drums, matches original Track10
@@ -2331,7 +2333,7 @@ function loadSongObject(newSongObj){
   if(!song.tempoChanges || !song.tempoChanges.length) song.tempoChanges=[{tick:0,bpm:song.tempo}];
   if(!song.limits) song.limits = { maxFmTracks: null, maxPolyphonyPerTrack: null };
   if(!song.fmMemory) song.fmMemory = Array.from({length:16}, ()=>defaultFmPreset());
-  song.tracks.forEach(tr=>{ if(!tr.timbreEvents) tr.timbreEvents=[]; if(!tr.fmMemorySlot) tr.fmMemorySlot=1; });
+  song.tracks.forEach(tr=>{ if(!tr.timbreEvents) tr.timbreEvents=[]; if(!tr.fmMemorySlot) tr.fmMemorySlot=1; if(tr.sf2Key===undefined) tr.sf2Key=null; if(tr.sf2Name===undefined) tr.sf2Name=null; if(tr.sf2Bank===undefined) tr.sf2Bank=0; if(tr.sf2Program===undefined) tr.sf2Program=(tr.instrument>=0?tr.instrument:0); });
   resetMeasureCache(); invalidateTempoCache(); invalidateVoiceStealCache(); selection.clear(); clipboard=[]; undoStack=[]; redoStack=[];
   syncTrackNodesFromSong();
   closeOverlay('projectOverlay');
@@ -2708,7 +2710,7 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
     let wave=null;
     if(type===5) wave=(getActiveWaveformSamples(tr)||defaultRetroWaveform()).slice();
     const pan=(tr.pan||0)/100, a=(pan+1)*Math.PI/4;
-    const out={type,instrument:tr.instrument,gain:audible?tr.volume/127:0,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),wave,notes:[],presets:presetPool};
+    const out={type,instrument:tr.instrument,gain:audible?tr.volume/127:0,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0};
     tr.notes.forEach(nt=>{
       const endTick=effectiveNoteEndTick(ti,nt);
       const when=leadSeconds+tickToSeconds(nt.startTick);
@@ -2753,8 +2755,6 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
      The default GM SF2 is shared directly as PCM; only explicit custom SF2 tracks
      remain on the legacy path.
   */
-  const sf2Used=song.tracks.some(tr=>tr.instrumentType==='sf2');
-  if(sf2Used) return null;
   if(!actx) ensureAudio();
   // The default GM bank in the original app is the cached TimGM6mb SF2.
   // For the low-level renderer we load that same bank once, then read its
@@ -2762,6 +2762,8 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
   // for every note. This preserves the original GM timbres while keeping
   // the renderer's low-node-count architecture.
   const needsDefaultSf2=song.tracks.some(tr=>tr.instrumentType==='preset' && tr.instrument>=0 && tr.instrument<128 && tr.notes.length);
+  const missingCustom=song.tracks.some(tr=>tr.instrumentType==='sf2' && tr.notes.length && !getCustomSf2ByKey(tr.sf2Key));
+  if(missingCustom) showToast('一部のカスタムSF2が未読み込みです。内蔵GM音源へフォールバックします');
   if(needsDefaultSf2 && !sf2Ready){
     setExportProgress('GM音源を準備中...',.01);
     if(!(await waitForSf2Ready())){
@@ -3109,10 +3111,12 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
       // Default GM preset: use the SAME cached SF2 bank as the original app,
       // but mix its PCM samples directly. No AudioBufferSourceNode is created
       // for the note, and the SF2 sample data remains shared in memory.
-      if(kind===2 && sf2Ready && (tr.instrument===-1 || (tr.instrument>=0 && tr.instrument<128))){
-        const isDrum=tr.instrument===-1;
-        const program=isDrum?0:(tr.instrument|0);
-        const preset=sf2.findPreset(isDrum?128:0,program);
+      if(kind===2 && (tr.instrumentType==='sf2' || (sf2Ready && (tr.instrument===-1 || (tr.instrument>=0 && tr.instrument<128))))){
+        const custom=tr.instrumentType==='sf2';
+        const font=custom ? getCustomSf2ByKey(tr.sf2Key)?.sf2 : sf2;
+        const bank=custom ? (tr.sf2Bank|0) : (tr.instrument===-1?128:0);
+        const program=custom ? (tr.sf2Program|0) : (tr.instrument===-1?0:(tr.instrument|0));
+        const preset=font ? font.findPreset(bank,program) : null;
 
         // IMPORTANT: live playback intentionally resolves ONE SF2 voice.
         // The old fast renderer used sf2VoiceParamsAll(), which stacked every
@@ -3123,9 +3127,9 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         const vp=preset ? sf2VoiceParams(preset,n.p,vel) : null;
         if(vp){
           const params=sf2ComputeParams(vp.instGens,vp.presetGens);
-          const sample=vp.sample, src=sf2.sampleData;
+          const sample=vp.sample, src=font.sampleData;
           const sampleStart=Math.max(0,sample.start);
-          const sampleEnd=Math.min(sf2.sampleData.length,sample.end);
+          const sampleEnd=Math.min(font.sampleData.length,sample.end);
           const sampleLen=Math.max(1,sampleEnd-sampleStart);
           const rootKey=params.overridingRootKey>=0 ? params.overridingRootKey : sample.originalPitch;
 
@@ -3409,7 +3413,7 @@ function openTrackDialog(){
   song.tracks.forEach((tr,i)=>{
     const row = document.createElement('div');
     row.className='listrow'+(i===song.activeTrack?' selected':'');
-    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : (tr.instrument===-1 ? '(drums)' : (String(tr.instrument).padStart(3,'0')+':'+GM_INSTRUMENTS[tr.instrument]));
+    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : (String(tr.instrument).padStart(3,'0')+':'+GM_INSTRUMENTS[tr.instrument]));
     const checked = otherTracksVisible.has(i) ? 'checked' : '';
     row.innerHTML = `<div style="display:flex;align-items:center;"><input type="checkbox" class="visChk" ${checked} style="margin-right:10px;width:18px;height:18px;"><span class="dot"></span>${tr.name}</div><span class="sub">${instName}</span>`;
     row.querySelector('.visChk').addEventListener('click', e=>{
@@ -3439,7 +3443,7 @@ document.getElementById('instBtn').onclick=()=>openInstDialog(song.activeTrack);
 function openInstDialog(trackIdx){
   instPendingTrack = trackIdx;
   const tr = song.tracks[trackIdx];
-  switchInstTab(tr.instrumentType==='synth' ? 'synth' : 'preset');
+  switchInstTab(tr.instrumentType==='synth' ? 'synth' : (tr.instrumentType==='sf2' ? 'sf2' : 'preset'));
   const keys = document.getElementById('previewKeys');
   keys.innerHTML='';
   for(let o=1;o<=7;o++){
@@ -3469,17 +3473,62 @@ document.getElementById('instTabPreset').onclick=()=>switchInstTab('preset');
 document.getElementById('instTabSynth').onclick=()=>switchInstTab('synth');
 document.getElementById('instTabSf2').onclick=()=>switchInstTab('sf2');
 
-/* SF2 tab: UI skeleton only for now — lets the person browse to where multi-soundfont
-   support will live, without the load button actually doing anything yet. */
+/* ---- User SF2 library ----
+   Custom SoundFonts are separate from the default GM bank. Tracks store only a
+   lightweight reference (sf2Key/bank/program), so project JSON never embeds .sf2 bytes. */
 let loadedCustomSf2Files = [];
-function renderSf2Pane(){
-  const body = document.getElementById('instSf2List');
-  body.innerHTML = loadedCustomSf2Files.length
-    ? ''
-    : '<div style="padding:16px;color:var(--text-dim);font-size:13px;">読み込まれたSF2はありません</div>';
+function makeSf2Key(fileName, byteLength){
+  let h=2166136261;
+  const str=String(fileName)+'\0'+String(byteLength);
+  for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); }
+  return 'sf2-'+(h>>>0).toString(16);
 }
-document.getElementById('instSf2LoadBtn').onclick=()=>{
-  showToast('SF2読み込み機能は今後追加予定です');
+function getCustomSf2ByKey(key){ return loadedCustomSf2Files.find(x=>x.key===key)||null; }
+function getTrackSoundFont(tr){
+  if(tr.instrumentType==='sf2') return getCustomSf2ByKey(tr.sf2Key)?.sf2 || null;
+  return sf2;
+}
+function getTrackSf2Preset(tr){
+  const bank=tr.instrumentType==='sf2' ? (tr.sf2Bank|0) : (tr.instrument===-1?128:0);
+  const program=tr.instrumentType==='sf2' ? (tr.sf2Program|0) : (tr.instrument===-1?0:tr.instrument|0);
+  const font=getTrackSoundFont(tr);
+  return font ? {font,bank,program,preset:font.findPreset(bank,program)} : null;
+}
+function customSf2DisplayName(item){ return item?.name || item?.sf2?.name || 'SoundFont'; }
+function renderSf2Pane(){
+  const body=document.getElementById('instSf2List'); body.innerHTML='';
+  const tr=song.tracks[instPendingTrack];
+  if(!loadedCustomSf2Files.length){
+    body.innerHTML='<div style="padding:16px;color:var(--text-dim);font-size:13px;">読み込まれたSF2はありません。下の「SF2を読み込む」から追加できます。</div>';
+    return;
+  }
+  loadedCustomSf2Files.forEach(item=>{
+    const header=document.createElement('div');
+    header.style.cssText='padding:9px 12px;background:var(--panel2,var(--panel));position:sticky;top:0;z-index:1;font-weight:600;border-bottom:1px solid var(--border);';
+    header.textContent=customSf2DisplayName(item); body.appendChild(header);
+    const presets=item.sf2.presets||[];
+    if(!presets.length){ const e=document.createElement('div'); e.style.cssText='padding:10px 16px;color:var(--text-dim);font-size:12px;'; e.textContent='プリセットが見つかりません'; body.appendChild(e); return; }
+    presets.forEach(preset=>{
+      const row=document.createElement('div'); row.className='listrow';
+      const selected=tr.instrumentType==='sf2' && tr.sf2Key===item.key && (tr.sf2Bank|0)===preset.bank && (tr.sf2Program|0)===preset.preset;
+      if(selected) row.classList.add('selected');
+      const bankLabel=preset.bank===128?'Drum':('Bank '+preset.bank);
+      row.innerHTML=`<div style="display:flex;align-items:center;min-width:0;"><span class="dot"></span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${String(preset.preset).padStart(3,'0')}: ${preset.name||'(no name)'}</span></div><span class="sub">${bankLabel}</span>`;
+      row.onclick=()=>{
+        tr.instrumentType='sf2'; tr.sf2Key=item.key; tr.sf2Name=customSf2DisplayName(item);
+        tr.sf2Bank=preset.bank|0; tr.sf2Program=preset.preset|0;
+        tr.instrument=preset.bank===128 ? -1 : Math.max(0,Math.min(127,preset.preset|0));
+        renderSf2Pane(); updateTrackGridUI(); reschedulePlaybackNow();
+      };
+      body.appendChild(row);
+    });
+  });
+}
+document.getElementById('instSf2LoadBtn').onclick=()=>document.getElementById('sf2FileInput').click();
+document.getElementById('sf2FileInput').onchange=async e=>{
+  const files=[...e.target.files||[]];
+  for(const file of files) await loadCustomSF2File(file);
+  e.target.value=''; renderSf2Pane();
 };
 
 function renderInstList(){
@@ -4103,7 +4152,7 @@ function openMixer(){
   const body = document.getElementById('mixerBody'); body.innerHTML='';
   song.tracks.forEach((tr,i)=>{
     const row = document.createElement('div'); row.className='mixch';
-    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : (tr.instrument===-1 ? '(drums)' : GM_INSTRUMENTS[tr.instrument]);
+    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : GM_INSTRUMENTS[tr.instrument]);
     row.innerHTML = `
       <div class="bar ${i===song.activeTrack?'active':''}"></div>
       <div class="name">${i+1}</div>
@@ -4350,12 +4399,12 @@ function sf2ComputeParams(instGens, presetGens){
     keyVolHold:add(39,0), keyVolDecay:add(40,0)
   };
 }
-function sf2GetAudioBuffer(sample){
+function sf2GetAudioBuffer(sample, font=sf2){
   if(sample._buf) return sample._buf;
   const len = Math.max(1, sample.end - sample.start);
   const buf = actx.createBuffer(1, len, sample.sampleRate || 44100);
   const data = buf.getChannelData(0);
-  const src = sf2.sampleData;
+  const src = font.sampleData;
   for(let i=0;i<len;i++) data[i] = (src[sample.start+i]||0)/32768;
   sample._buf = buf;
   return buf;
@@ -4400,17 +4449,17 @@ function applyPitchCurveToParam(param, baseValue, when, dur, pitchCurve){
   });
 }
 function sf2Voice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato){
-  if(!sf2Ready) return false;
   const tr = song.tracks[trackIdx];
-  const bank = tr.instrument===-1 ? 128 : 0;
-  const program = tr.instrument===-1 ? 0 : tr.instrument;
-  const preset = sf2.findPreset(bank, program);
+  const info=getTrackSf2Preset(tr);
+  if(!info || !info.font || !info.preset) return false;
+  const bank=info.bank, program=info.program, preset=info.preset;
+  const sf2ForVoice=info.font;
   if(!preset) return false;
   const vp = sf2VoiceParams(preset, note, vel);
   if(!vp) return false;
   const params = sf2ComputeParams(vp.instGens, vp.presetGens);
   const sample = vp.sample;
-  const buf = sf2GetAudioBuffer(sample);
+  const buf = sf2GetAudioBuffer(sample, sf2ForVoice);
   const src = actx.createBufferSource();
   src.buffer = buf;
   const rootKey = params.overridingRootKey>=0 ? params.overridingRootKey : sample.originalPitch;
@@ -4641,7 +4690,7 @@ function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibra
     try{ return retroSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato); }
     catch(err){ console.warn('retro synth voice failed, falling back', err); }
   }
-  if(sf2Ready){
+  if(sf2Ready || tr.instrumentType==='sf2') {
     try{ const h = sf2Voice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato); if(h) return h; }
     catch(err){ console.warn('sf2 voice failed, falling back', err); }
   }
@@ -4673,6 +4722,7 @@ function ensureAudio(){
   masterGain = actx.createGain(); masterGain.gain.value=0.9; masterGain.connect(actx.destination);
   buildTrackNodes();
   if(!sf2LoadStarted){ sf2LoadStarted=true; sf2LoadPromise=loadDefaultSF2(); }
+  if(!loadedCustomSf2Files.length) loadLastCustomSF2().then(()=>{ if(instActiveTab==='sf2') renderSf2Pane(); }).catch(()=>{});
   return actx;
 }
 function effectiveTrackGain(tr){
@@ -4754,16 +4804,29 @@ async function loadDefaultSF2(){
 }
 async function loadCustomSF2File(file){
   try{
-    showToast('sf2を読込中: '+file.name);
-    const buf = await file.arrayBuffer();
-    const parsed = new SF2(buf);
-    sf2 = parsed; sf2Ready = true;
-    idbSet('custom_last', buf).catch(()=>{});
-    showToast('sf2読込完了: '+file.name);
+    showToast('SF2を読込中: '+file.name);
+    const buf=await file.arrayBuffer();
+    const parsed=new SF2(buf);
+    const key=makeSf2Key(file.name,buf.byteLength);
+    const existing=loadedCustomSf2Files.find(x=>x.key===key);
+    const item={key,name:file.name,sf2:parsed,byteLength:buf.byteLength};
+    if(existing) Object.assign(existing,item); else loadedCustomSf2Files.push(item);
+    idbSet('custom_last_meta',{key,name:file.name,byteLength:buf.byteLength}).catch(()=>{});
+    idbSet('custom_last',buf).catch(()=>{});
+    showToast('SF2読込完了: '+file.name+' ('+parsed.presets.length+'プリセット)');
   }catch(err){
     console.error(err);
     showToast('sf2の読込に失敗しました: '+err.message);
   }
+}
+async function loadLastCustomSF2(){
+  try{
+    const meta=await idbGet('custom_last_meta').catch(()=>null);
+    const buf=await idbGet('custom_last').catch(()=>null);
+    if(!buf || !meta) return;
+    const parsed=new SF2(buf);
+    loadedCustomSf2Files=[{key:meta.key||makeSf2Key(meta.name||'SoundFont',buf.byteLength),name:meta.name||'SoundFont',sf2:parsed,byteLength:buf.byteLength}];
+  }catch(err){ console.warn('last custom sf2 load failed',err); }
 }
 
 let previewVoices=[]; // short one-shot preview notes (tap-select feedback, move-drag pitch preview) — force-stopped on gesture end
