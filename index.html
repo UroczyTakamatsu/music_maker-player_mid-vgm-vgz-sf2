@@ -40,9 +40,12 @@
   #trackGrid div{background:#3a3f4c;border-radius:1px;}
   #trackGrid div.active{background:var(--rec);}
 
-  #topbar2{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg-1);border-bottom:1px solid var(--line);font-size:13px;color:var(--text-dim);}
+  #topbar2{display:flex;align-items:center;gap:8px;padding:6px 10px 6px var(--keyw,140px);background:var(--bg-1);border-bottom:1px solid var(--line);font-size:13px;color:var(--text-dim);}
+  #topbar2 #instBtn{position:absolute;left:10px;}
+  #tempoLabel + #timesigLabel{margin-left:2px;}
   #timesigLabel{color:var(--accent);font-weight:600;}
-  #gridDivBtn{margin-left:auto;}
+  #rollGridDivBtn{position:absolute;top:8px;right:30px;z-index:8;opacity:.58;background:rgba(20,22,28,.58);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);border:1px solid rgba(255,255,255,.12);}
+  #rollGridDivBtn:active{opacity:.9;}
   #showOtherTracksBtn[data-mode="dim"]{background:var(--accent-dim);color:#fff;}
   #showOtherTracksBtn[data-mode="full"]{background:var(--accent);color:#0a0a0a;}
   #pitchCurveBtn.active{background:var(--accent-dim);color:#fff;}
@@ -57,7 +60,20 @@
   #pitchOverlay{position:absolute;left:var(--keyw,140px);top:0;z-index:2;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);background:rgba(18,20,26,.18);touch-action:none;}
   #pitchOverlay.hidden{display:none;}
   #pitchCanvas{display:block;}
+  #panOverlay{position:absolute;left:var(--keyw,140px);top:0;z-index:2;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);background:rgba(18,20,26,.22);touch-action:none;}
+  #panOverlay.hidden{display:none;}
+  #panCanvas{display:block;touch-action:none;}
+  #panCurveBtn.active{background:var(--accent-dim);color:#fff;}
+  #volCurveBtn.active{background:var(--accent-dim);color:#fff;}
+  #volOverlay{position:absolute;left:var(--keyw,140px);top:0;z-index:2;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);background:rgba(18,20,26,.22);touch-action:none;}
+  #volOverlay.hidden{display:none;}
+  #volCanvas{display:block;touch-action:none;}
+
   #flagCanvas{position:absolute;left:0;top:0;height:20px;width:100%;}
+
+  #pitchSubbar{display:flex;align-items:center;background:var(--bg-1);border-bottom:1px solid var(--line);padding:3px 8px;gap:4px;min-height:34px;}
+  #pitchSubbar.hidden{display:none;}
+  #pitchSubbar .iconbtn{flex:0 0 auto;}
 
   #vScrollTrack{position:absolute;right:0;top:20px;bottom:0;width:21px;background:var(--bg-1);z-index:4;touch-action:none;}
   #vScrollThumb{position:absolute;left:1px;right:1px;background:#454b5c;border-radius:6px;}
@@ -163,26 +179,32 @@
     <button class="iconbtn" id="menuBtn" title="メニュー">☰</button>
     <button class="iconbtn" id="songSettingsBtn" title="テンポ/拍子">📄</button>
     <span id="tempoLabel">♩ = 120</span>
-    <button class="iconbtn" id="instBtn" title="音色">▭</button>
+    <span id="timesigLabel">4/4</span>
     <div id="trackGrid" title="トラック選択"></div>
   </div>
 
   <div id="topbar2">
-    <span id="timesigLabel">4/4</span>
+    <button class="iconbtn" id="instBtn" title="音色">🎸</button>
     <button class="iconbtn" id="showOtherTracksBtn" title="他トラック表示">▤</button>
     <button class="iconbtn" id="pitchCurveBtn" title="ピッチカーブ編集">〰</button>
     <button class="iconbtn" id="waveformViewBtn" title="トラックの波形を表示">📈</button>
-    <button class="iconbtn" id="pitchClearBtn" title="ピッチカーブなしにする" style="display:none;">〰✕</button>
-    <button class="iconbtn" id="vibratoBtn" title="ビブラート" style="display:none;">〜♪</button>
-    <button class="iconbtn" id="gridDivBtn" title="グリッド分割">♪</button>
+     <button class="iconbtn" id="panCurveBtn" title="PANオートメーション編集">↔</button>
+    <button class="iconbtn" id="volCurveBtn" title="ボリュームオートメーション編集">🔊</button>
+  </div>
+  <div id="pitchSubbar" class="hidden">
+    <button class="iconbtn" id="pitchClearBtn" title="ピッチカーブなしにする">〰✕</button>
+    <button class="iconbtn" id="vibratoBtn" title="ビブラート">〜♪</button>
   </div>
 
   <div id="rollWrap">
     <div id="flagStrip"><canvas id="flagCanvas"></canvas></div>
     <div id="rollScroll">
+      <button class="iconbtn" id="rollGridDivBtn" title="グリッド分割">♪</button>
       <canvas id="kbCanvas"></canvas>
       <canvas id="gridCanvas"></canvas>
       <div id="pitchOverlay" class="hidden"><canvas id="pitchCanvas"></canvas></div>
+       <div id="panOverlay" class="hidden"><canvas id="panCanvas"></canvas></div>
+       <div id="volOverlay" class="hidden"><canvas id="volCanvas"></canvas></div>
     </div>
     <div id="vScrollTrack"><div id="vScrollThumb"></div></div>
     <div id="hScrollTrack"><div id="hScrollThumb"></div></div>
@@ -724,7 +746,7 @@ function newTrack(i){
     synthMode:'preset', synthPresetIdx:3, synthCustomSlot:1,
     sf2Key:null, sf2Name:null, sf2Bank:0, sf2Program:0,
     fmMemorySlot:1, timbreEvents:[], // FM Synth: which of the 16 project-wide memory slots this track uses, plus mid-track switch events
-    volume:100, pan:0, notes:[], muted:false, solo:false };
+    volume:100, pan:0, panPoints:[], volumePoints:[], notes:[], muted:false, solo:false };
   // instrument -1 == drums, matches original Track10
 }
 
@@ -1028,6 +1050,24 @@ function resizeCanvases(){
   pitchCanvas.style.width=gw+'px'; pitchCanvas.style.height=gh+'px';
   pitchCanvas.width=Math.round(gw*dpr); pitchCanvas.height=Math.round(gh*dpr);
   pitchCanvas.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+
+  // PAN overlay must use exactly the same viewport size as the piano-roll grid.
+  // Without this, the overlay div/canvas keeps its intrinsic size and collapses
+  // to a small box at the top-left when PAN mode is enabled.
+  const panOverlay = document.getElementById('panOverlay');
+  panOverlay.style.width=gw+'px'; panOverlay.style.height=gh+'px';
+  const panCanvas = document.getElementById('panCanvas');
+  panCanvas.style.width=gw+'px'; panCanvas.style.height=gh+'px';
+  panCanvas.width=Math.round(gw*dpr); panCanvas.height=Math.round(gh*dpr);
+  panCanvas.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+
+  const volOverlay = document.getElementById('volOverlay');
+  volOverlay.style.width=gw+'px'; volOverlay.style.height=gh+'px';
+  const volCanvas = document.getElementById('volCanvas');
+  volCanvas.style.width=gw+'px'; volCanvas.style.height=gh+'px';
+  volCanvas.width=Math.round(gw*dpr); volCanvas.height=Math.round(gh*dpr);
+  volCanvas.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+
   const flagRect = document.getElementById('flagStrip').getBoundingClientRect();
   flagCanvas.style.width=flagRect.width+'px'; flagCanvas.style.height='20px';
   flagCanvas.width=Math.round(flagRect.width*dpr); flagCanvas.height=Math.round(20*dpr);
@@ -1296,6 +1336,8 @@ function drawAll(){
   drawKeyboard(); drawGrid(); drawFlagStrip(); updateScrollbars();
   updateTrackGridUI(); updatePosLabel(); updateTimesigLabel(); updateFlagIdxLabel();
   if(pitchEditMode) drawPitchOverlay();
+  if(panEditMode) drawPanOverlay();
+  if(volEditMode) drawVolOverlay();
 }
 
 /* ============================================================
@@ -1785,11 +1827,12 @@ const pitchCanvas = document.getElementById('pitchCanvas');
 const pitchOverlayEl = document.getElementById('pitchOverlay');
 
 document.getElementById('pitchCurveBtn').onclick=(e)=>{
+  if(!pitchEditMode && panEditMode) setPanEditMode(false);
+  if(!pitchEditMode && volEditMode) setVolEditMode(false);
   pitchEditMode = !pitchEditMode;
   e.currentTarget.classList.toggle('active', pitchEditMode);
   pitchOverlayEl.classList.toggle('hidden', !pitchEditMode);
-  document.getElementById('pitchClearBtn').style.display = pitchEditMode ? '' : 'none';
-  document.getElementById('vibratoBtn').style.display = pitchEditMode ? '' : 'none';
+  document.getElementById('pitchSubbar').classList.toggle('hidden', !pitchEditMode);
   updatePitchOverlayInteractivity();
   if(pitchEditMode) drawPitchOverlay();
 };
@@ -2088,6 +2131,162 @@ function drawPitchOverlay(){
     ctx.stroke();
   }
 }
+
+/* ============================================================
+   PAN AUTOMATION EDITOR
+   Time runs left-to-right exactly like the piano roll. Vertical axis:
+   top = R, center = 0, bottom = L. Points are linearly interpolated.
+   ============================================================ */
+let panEditMode=false;
+let panDrag=null;
+const panCanvas=document.getElementById('panCanvas');
+const panOverlayEl=document.getElementById('panOverlay');
+const panCurveBtn=document.getElementById('panCurveBtn');
+const PAN_EDIT_MARGIN=30;
+function sortedPanPoints(tr){
+  if(!Array.isArray(tr.panPoints)) tr.panPoints=[];
+  return tr.panPoints.slice().sort((a,b)=>a.tick-b.tick);
+}
+function panToY(pan,h){
+  const inner=Math.max(1,h-PAN_EDIT_MARGIN*2);
+  const v=Math.max(-100,Math.min(100,Number(pan)||0));
+  return PAN_EDIT_MARGIN + (100-v)/200*inner;
+}
+function yToPan(y,h){
+  const inner=Math.max(1,h-PAN_EDIT_MARGIN*2);
+  const yy=Math.max(PAN_EDIT_MARGIN,Math.min(h-PAN_EDIT_MARGIN,y));
+  return Math.round(100-((yy-PAN_EDIT_MARGIN)/inner)*200);
+}
+function panAtTick(tr,tick){
+  const pts=sortedPanPoints(tr);
+  if(!pts.length) return Math.max(-100,Math.min(100,tr.pan||0));
+  if(tick<=pts[0].tick) return pts[0].pan;
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1],b=pts[i];
+    if(tick<=b.tick){ const u=(tick-a.tick)/(b.tick-a.tick||1); return a.pan+(b.pan-a.pan)*u; }
+  }
+  return pts[pts.length-1].pan;
+}
+function panOverlayPos(e){ const r=panCanvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+function panPointHit(x,y){
+  const tr=song.tracks[song.activeTrack], pts=sortedPanPoints(tr), h=panCanvas.clientHeight;
+  let best=null, bestD=24;
+  pts.forEach((pt,i)=>{
+    const dx=Math.abs(tickToX(pt.tick)-x), dy=Math.abs(panToY(pt.pan,h)-y);
+    const d=Math.hypot(dx,dy);
+    if(d<=bestD) { best={pt,i}; bestD=d; }
+  });
+  return best;
+}
+function drawPanOverlay(){
+  const ctx=panCanvas.getContext('2d'), dpr=window.devicePixelRatio||1;
+  const w=panCanvas.width/dpr, h=panCanvas.height/dpr;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='rgba(18,20,26,.20)'; ctx.fillRect(0,0,w,h);
+  // labels and horizontal guides
+  ctx.font='11px sans-serif'; ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(255,255,255,.78)'; ctx.fillText('R  +100',8,PAN_EDIT_MARGIN); ctx.fillText('PAN  0',8,h/2); ctx.fillText('L  -100',8,h-PAN_EDIT_MARGIN);
+  const y0=panToY(0,h); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(0,y0+.5); ctx.lineTo(w,y0+.5); ctx.stroke();
+  const tr=song.tracks[song.activeTrack], pts=sortedPanPoints(tr);
+  // grid lines
+  const gt=gridTicks(), start=Math.max(0,Math.floor(view.scrollX/gt)*gt), end=view.scrollX+w/view.pxPerTick;
+  ctx.strokeStyle='rgba(255,255,255,.10)';
+  for(let t=start;t<=end;t+=gt){ const x=tickToX(t); ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); ctx.stroke(); }
+  if(pts.length){
+    ctx.strokeStyle='#ffcf8a'; ctx.lineWidth=2.5; ctx.beginPath();
+    pts.forEach((pt,i)=>{ const x=tickToX(pt.tick), y=panToY(pt.pan,h); if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
+    pts.forEach(pt=>{ const x=tickToX(pt.tick), y=panToY(pt.pan,h); if(x<-16||x>w+16)return; ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.fillStyle='#e2a24f'; ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=1.5; ctx.stroke(); });
+  }
+}
+function setPanEditMode(on){
+  panEditMode=!!on; panCurveBtn.classList.toggle('active',panEditMode); panOverlayEl.classList.toggle('hidden',!panEditMode);
+  if(panEditMode){ setVolEditMode(false); pitchEditMode=false; document.getElementById('pitchCurveBtn').classList.remove('active'); document.getElementById('pitchSubbar').classList.add('hidden'); updatePitchOverlayInteractivity(); drawPanOverlay(); }
+  else { panDrag=null; }
+}
+panCurveBtn.onclick=()=>setPanEditMode(!panEditMode);
+panCanvas.addEventListener('pointerdown',e=>{
+  e.preventDefault(); const p=panOverlayPos(e); try{panCanvas.setPointerCapture(e.pointerId);}catch(_){}
+  const tr=song.tracks[song.activeTrack], hit=panPointHit(p.x,p.y);
+  if(hit){ panDrag={pointerId:e.pointerId,pt:hit.pt,offsetY:yToPan(p.y,panCanvas.clientHeight)-hit.pt.pan}; }
+  else { const tick=Math.max(0,snapTick(xToTick(p.x))), pan=Math.max(-100,Math.min(100,yToPan(p.y,panCanvas.clientHeight))); const pt={tick,pan}; tr.panPoints=Array.isArray(tr.panPoints)?tr.panPoints:[]; tr.panPoints.push(pt); panDrag={pointerId:e.pointerId,pt,offsetY:0}; }
+  tr.panPoints.sort((a,b)=>a.tick-b.tick); drawPanOverlay();
+});
+panCanvas.addEventListener('pointermove',e=>{
+  if(!panDrag || panDrag.pointerId!==e.pointerId) return;
+  const p=panOverlayPos(e), tr=song.tracks[song.activeTrack], pt=panDrag.pt; if(!pt)return;
+  pt.tick=Math.max(0,snapTick(xToTick(p.x)));
+  pt.pan=Math.max(-100,Math.min(100,yToPan(p.y,panCanvas.clientHeight)-panDrag.offsetY));
+  tr.panPoints.sort((a,b)=>a.tick-b.tick); drawPanOverlay();
+});
+function endPanEditPointer(){ panDrag=null; drawPanOverlay(); }
+panCanvas.addEventListener('pointerup',endPanEditPointer); panCanvas.addEventListener('pointercancel',endPanEditPointer); panCanvas.addEventListener('lostpointercapture',endPanEditPointer);
+panCanvas.addEventListener('dblclick',e=>{ const p=panOverlayPos(e), hit=panPointHit(p.x,p.y); if(hit){ song.tracks[song.activeTrack].panPoints.splice(hit.i,1); drawPanOverlay(); } });
+
+/* ============================================================
+   VOLUME AUTOMATION EDITOR
+   Time runs left-to-right exactly like the piano roll. Vertical axis:
+   top = 127 (100%), bottom = 0. Points are linearly interpolated.
+   ============================================================ */
+let volEditMode=false;
+let volDrag=null;
+const volCanvas=document.getElementById('volCanvas');
+const volOverlayEl=document.getElementById('volOverlay');
+const volCurveBtn=document.getElementById('volCurveBtn');
+const VOL_EDIT_MARGIN=30;
+function sortedVolumePoints(tr){
+  if(!Array.isArray(tr.volumePoints)) tr.volumePoints=[];
+  return tr.volumePoints.slice().sort((a,b)=>a.tick-b.tick);
+}
+function volumeToY(v,h){
+  const inner=Math.max(1,h-VOL_EDIT_MARGIN*2);
+  const x=Math.max(0,Math.min(127,Number(v)||0));
+  return VOL_EDIT_MARGIN + (127-x)/127*inner;
+}
+function yToVolume(y,h){
+  const inner=Math.max(1,h-VOL_EDIT_MARGIN*2);
+  const yy=Math.max(VOL_EDIT_MARGIN,Math.min(h-VOL_EDIT_MARGIN,y));
+  return Math.round(127-((yy-VOL_EDIT_MARGIN)/inner)*127);
+}
+function volumeAtTick(tr,tick){
+  const pts=sortedVolumePoints(tr);
+  if(!pts.length) return Math.max(0,Math.min(127,tr.volume??100));
+  if(tick<=pts[0].tick) return pts[0].volume;
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1],b=pts[i];
+    if(tick<=b.tick){ const u=(tick-a.tick)/(b.tick-a.tick||1); return a.volume+(b.volume-a.volume)*u; }
+  }
+  return pts[pts.length-1].volume;
+}
+function volOverlayPos(e){ const r=volCanvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+function volPointHit(x,y){
+  const tr=song.tracks[song.activeTrack], pts=sortedVolumePoints(tr), h=volCanvas.clientHeight;
+  let best=null,bestD=24;
+  pts.forEach((pt,i)=>{ const dx=Math.abs(tickToX(pt.tick)-x),dy=Math.abs(volumeToY(pt.volume,h)-y),d=Math.hypot(dx,dy); if(d<=bestD){best={pt,i};bestD=d;} });
+  return best;
+}
+function drawVolOverlay(){
+  const ctx=volCanvas.getContext('2d'),dpr=window.devicePixelRatio||1;
+  const w=volCanvas.width/dpr,h=volCanvas.height/dpr;
+  ctx.clearRect(0,0,w,h); ctx.fillStyle='rgba(18,20,26,.20)';ctx.fillRect(0,0,w,h);
+  ctx.font='11px sans-serif';ctx.textBaseline='middle';ctx.fillStyle='rgba(255,255,255,.78)';
+  ctx.fillText('VOL 127',8,VOL_EDIT_MARGIN);ctx.fillText('VOL '+Math.round(volumeAtTick(song.tracks[song.activeTrack],view.scrollX)),8,h/2);ctx.fillText('VOL 0',8,h-VOL_EDIT_MARGIN);
+  const y100=volumeToY(100,h);ctx.strokeStyle='rgba(255,255,255,.14)';ctx.beginPath();ctx.moveTo(0,y100+.5);ctx.lineTo(w,y100+.5);ctx.stroke();
+  const gt=gridTicks(),start=Math.max(0,Math.floor(view.scrollX/gt)*gt),end=view.scrollX+w/view.pxPerTick;
+  ctx.strokeStyle='rgba(255,255,255,.10)';for(let t=start;t<=end;t+=gt){const x=tickToX(t);ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,h);ctx.stroke();}
+  const tr=song.tracks[song.activeTrack],pts=sortedVolumePoints(tr);
+  if(pts.length){ctx.strokeStyle='#7fc8ff';ctx.lineWidth=2.5;ctx.beginPath();pts.forEach((pt,i)=>{const x=tickToX(pt.tick),y=volumeToY(pt.volume,h);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();pts.forEach(pt=>{const x=tickToX(pt.tick),y=volumeToY(pt.volume,h);if(x<-16||x>w+16)return;ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.fillStyle='#66b7ff';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1.5;ctx.stroke();});}
+}
+function setVolEditMode(on){
+  volEditMode=!!on;volCurveBtn.classList.toggle('active',volEditMode);volOverlayEl.classList.toggle('hidden',!volEditMode);
+  if(volEditMode){setPanEditMode(false);pitchEditMode=false;document.getElementById('pitchCurveBtn').classList.remove('active');document.getElementById('pitchClearBtn').style.display='none';document.getElementById('vibratoBtn').style.display='none';drawVolOverlay();}
+  else volDrag=null;
+}
+volCurveBtn.onclick=()=>setVolEditMode(!volEditMode);
+volCanvas.addEventListener('pointerdown',e=>{e.preventDefault();const p=volOverlayPos(e);try{volCanvas.setPointerCapture(e.pointerId);}catch(_){}const tr=song.tracks[song.activeTrack],hit=volPointHit(p.x,p.y);if(hit){volDrag={pointerId:e.pointerId,pt:hit.pt,offsetY:yToVolume(p.y,volCanvas.clientHeight)-hit.pt.volume};}else{const tick=Math.max(0,snapTick(xToTick(p.x))),volume=yToVolume(p.y,volCanvas.clientHeight);const pt={tick,volume};tr.volumePoints=Array.isArray(tr.volumePoints)?tr.volumePoints:[];tr.volumePoints.push(pt);volDrag={pointerId:e.pointerId,pt,offsetY:0};}tr.volumePoints.sort((a,b)=>a.tick-b.tick);drawVolOverlay();});
+volCanvas.addEventListener('pointermove',e=>{if(!volDrag||volDrag.pointerId!==e.pointerId)return;const p=volOverlayPos(e),tr=song.tracks[song.activeTrack],pt=volDrag.pt;if(!pt)return;pt.tick=Math.max(0,snapTick(xToTick(p.x)));pt.volume=Math.max(0,Math.min(127,yToVolume(p.y,volCanvas.clientHeight)-volDrag.offsetY));tr.volumePoints.sort((a,b)=>a.tick-b.tick);drawVolOverlay();});
+function endVolEditPointer(){volDrag=null;drawVolOverlay();}
+volCanvas.addEventListener('pointerup',endVolEditPointer);volCanvas.addEventListener('pointercancel',endVolEditPointer);volCanvas.addEventListener('lostpointercapture',endVolEditPointer);
+volCanvas.addEventListener('dblclick',e=>{const p=volOverlayPos(e),hit=volPointHit(p.x,p.y);if(hit){song.tracks[song.activeTrack].volumePoints.splice(hit.i,1);drawVolOverlay();}});
 
 /* flag placement: tap on flag strip. Tapping near an existing flag selects/removes it (second tap on the
    already-current flag removes it); tapping empty space adds a new flag there. */
@@ -2718,7 +2917,9 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
     let wave=null;
     if(type===5) wave=(getActiveWaveformSamples(tr)||defaultRetroWaveform()).slice();
     const pan=(tr.pan||0)/100, a=(pan+1)*Math.PI/4;
-    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',gain:audible?tr.volume/127:0,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0};
+    const panPoints=sortedPanPoints(tr).map(pt=>({tick:pt.tick,pan:Math.max(-100,Math.min(100,pt.pan||0))}));
+    const volumePoints=sortedVolumePoints(tr).map(pt=>({tick:pt.tick,volume:Math.max(0,Math.min(127,pt.volume??100))}));
+    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',gain:audible?tr.volume/127:0,volume:tr.volume??100,volumePoints,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),panPoints,wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0};
     tr.notes.forEach(nt=>{
       const endTick=effectiveNoteEndTick(ti,nt);
       const when=leadSeconds+tickToSeconds(nt.startTick);
@@ -2846,6 +3047,33 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
     return wave[i]*(1-f)+wave[(i+1)%n]*f;
   }
 
+  function panAtTickCfg(tr,tick){
+    const pts=tr.panPoints;
+    if(!pts || !pts.length) return tr.pan||0;
+    if(tick<=pts[0].tick) return pts[0].pan;
+    for(let i=1;i<pts.length;i++){
+      const a=pts[i-1], b=pts[i];
+      if(tick<=b.tick){ const u=(tick-a.tick)/(b.tick-a.tick||1); return a.pan+(b.pan-a.pan)*u; }
+    }
+    return pts[pts.length-1].pan;
+  }
+  function volumeAtTickCfg(tr,tick){
+    const pts=tr.volumePoints;
+    if(!pts || !pts.length) return tr.volume??100;
+    if(tick<=pts[0].tick) return pts[0].volume;
+    for(let i=1;i<pts.length;i++){
+      const a=pts[i-1], b=pts[i];
+      if(tick<=b.tick){ const u=(tick-a.tick)/(b.tick-a.tick||1); return a.volume+(b.volume-a.volume)*u; }
+    }
+    return pts[pts.length-1].volume;
+  }
+  function panGainsAtFrame(tr, frame){
+    const tick=secondsToTick(frame/sr);
+    const p=Math.max(-1,Math.min(1,panAtTickCfg(tr,tick)/100));
+    const a=(p+1)*Math.PI/4;
+    const vol=Math.max(0,Math.min(127,volumeAtTickCfg(tr,tick)))/127;
+    return [Math.cos(a)*vol*(tr.gain>0?1:0), Math.sin(a)*vol*(tr.gain>0?1:0)];
+  }
   function addSample(idx,x,panL,panR){
     L[idx]+=x*panL;
     R[idx]+=x*panR;
@@ -3101,9 +3329,6 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
   let processedTracks=0;
   for(const tr of cfg.tracks){
     const pan=tr.pan||0;
-    const panAngle=(pan+1)*Math.PI/4;
-    const panL=Math.cos(panAngle)*tr.gain;
-    const panR=Math.sin(panAngle)*tr.gain;
     const notes=tr.notes;
 
     for(let ni=0;ni<notes.length;ni++){
@@ -3160,12 +3385,6 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           const holdEnd=peakTime+hold;
           const decEnd=holdEnd+decay;
 
-          // Editor playback ignores SF2 pan and lets the track node provide
-          // the only pan stage.  Use the same equal-power track pan here.
-          const totalPan=Math.max(-1,Math.min(1,(tr.pan||0)/100));
-          const pa=(totalPan+1)*Math.PI/4;
-          const notePanL=Math.cos(pa)*tr.gain;
-          const notePanR=Math.sin(pa)*tr.gain;
 
           const looped=params.sampleModes===1 || params.sampleModes===3;
           const loopStart=Math.max(0,Math.min(sampleLen-1,sample.startLoop-sample.start));
@@ -3238,7 +3457,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
               e=0;
             }
             if(age<delay) e=0;
-            addSample(fr,smp*e,notePanL,notePanR);
+            { const pg=panGainsAtFrame(tr,fr); addSample(fr,smp*e,pg[0],pg[1]); }
           }
         } else {
           // A malformed/missing SF2 zone falls through to the procedural GM engine.
@@ -3247,7 +3466,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           for(let fr=start;fr<end;fr++){
             const age=(fr-start)/sr, pm=pitchMulAt(n,age);
             phase=(phase+2*Math.PI*pitch*pm/sr)%(2*Math.PI);
-            addSample(fr,gmTimbre(program,phase,pitch*pm,age,dur,vel)*gmEnvelope(program,age,dur,vel),panL,panR);
+            { const pg=panGainsAtFrame(tr,fr); addSample(fr,gmTimbre(program,phase,pitch*pm,age,dur,vel)*gmEnvelope(program,age,dur,vel),pg[0],pg[1]); }
           }
         }
       }else if(kind===6){
@@ -3323,7 +3542,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           else if(age<atk+dec) e=peak+(peak*sus-peak)*((age-atk)/dec);
           else if(age<relStart) e=peak*sus;
           else if(age<relStart+rel) e=peak*sus*Math.pow(.0001/Math.max(.0001,peak*sus),(age-relStart)/rel);
-          addSample(fr,smp*e,panL,panR);
+          { const pg=panGainsAtFrame(tr,fr); addSample(fr,smp*e,pg[0],pg[1]); }
         }
       }else if(kind===5){
         let phase=0;
@@ -3332,7 +3551,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           phase=(phase+2*Math.PI*pitch*pm/sr)%(2*Math.PI);
           const smp=waveSample(tr.wave,phase);
           const x=smp*envAt(kind,age,dur,vel,null)*(vel/127);
-          addSample(fr,x,panL,panR);
+          { const pg=panGainsAtFrame(tr,fr); addSample(fr,x,pg[0],pg[1]); }
         }
       }else if(kind===4){
         let seed=(n.p*1103515245+n.s*12345)>>>0;
@@ -3341,7 +3560,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           seed=(seed*1664525+1013904223)>>>0;
           const noise=(seed/4294967296)*2-1;
           const x=noise*envAt(kind,age,dur,vel,null)*(vel/127);
-          addSample(fr,x,panL,panR);
+          { const pg=panGainsAtFrame(tr,fr); addSample(fr,x,pg[0],pg[1]); }
         }
       }else{
         // Default MIDI preset: render the selected GM program with the
@@ -3355,7 +3574,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
           phase=(phase+2*Math.PI*pitch*pm/sr)%(2*Math.PI);
           const smp=gmTimbre(program,phase,pitch*pm,age,dur,vel);
           const x=smp*gmEnvelope(program,age,dur,vel);
-          addSample(fr,x,panL,panR);
+          { const pg=panGainsAtFrame(tr,fr); addSample(fr,x,pg[0],pg[1]); }
         }
       }
 
@@ -4222,7 +4441,7 @@ function updateTimesigLabel(){
 }
 
 /* ---- Grid division dialog ---- */
-document.getElementById('gridDivBtn').onclick=()=>{
+document.getElementById('rollGridDivBtn').onclick=()=>{
   const body=document.getElementById('gridDivBody'); body.innerHTML='';
   GRID_DIVISIONS.forEach(g=>{
     const row=document.createElement('div'); row.className='listrow'+(song.gridDiv===g.id?' selected':'');
@@ -4770,6 +4989,47 @@ function fmSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibr
   return handle;
 }
 
+function schedulePanAutomation(nowTick,aheadTick){
+  if(!actx) return;
+  const audioNow=actx.currentTime;
+  song.tracks.forEach((tr,i)=>{
+    const p=trackNodes[i] && trackNodes[i].pan;
+    if(!p) return;
+    const pts=sortedPanPoints(tr);
+    const cur=Math.max(-1,Math.min(1,panAtTick(tr,nowTick)/100));
+    try{
+      p.cancelScheduledValues(audioNow);
+      p.setValueAtTime(cur,audioNow);
+      pts.forEach(pt=>{
+        if(pt.tick<=nowTick || pt.tick>aheadTick) return;
+        const t=audioNow + tickSpanSeconds(nowTick,pt.tick);
+        p.linearRampToValueAtTime(Math.max(-1,Math.min(1,pt.pan/100)),t);
+      });
+    }catch(_){ p.pan.value=cur; }
+  });
+}
+
+function scheduleVolumeAutomation(nowTick,aheadTick){
+  if(!actx) return;
+  const audioNow=actx.currentTime;
+  song.tracks.forEach((tr,i)=>{
+    const g=trackNodes[i]&&trackNodes[i].gain;
+    if(!g) return;
+    const pts=sortedVolumePoints(tr);
+    const baseAudible=effectiveTrackGain(tr)>0;
+    const currentGain=baseAudible?Math.max(0,Math.min(127,volumeAtTick(tr,nowTick)))/127:0;
+    try{
+      g.cancelScheduledValues(audioNow);
+      g.setValueAtTime(currentGain,audioNow);
+      pts.forEach(pt=>{
+        if(pt.tick<=nowTick||pt.tick>aheadTick)return;
+        const t=audioNow+tickSpanSeconds(nowTick,pt.tick);
+        g.linearRampToValueAtTime(Math.max(0,Math.min(127,pt.volume))/127,t);
+      });
+    }catch(_){g.gain.value=currentGain;}
+  });
+}
+
 function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, noteTick){
   const tr = song.tracks[trackIdx];
   if(tr.instrumentType==='fm'){
@@ -5088,6 +5348,8 @@ function runScheduler(){
   if(!playing) return;
   const nowTick = secondsToTick(tickToSeconds(playStartTick) + (actx.currentTime-playStartTime));
   const aheadTick = secondsToTick(tickToSeconds(nowTick) + SCHEDULE_AHEAD_TIME);
+  schedulePanAutomation(nowTick, aheadTick);
+  scheduleVolumeAutomation(nowTick, aheadTick);
   while(scheduleIdx<scheduleQueue.length && scheduleQueue[scheduleIdx].nt.startTick<=aheadTick){
     const {ti,nt} = scheduleQueue[scheduleIdx];
     const when = playStartTime + tickSpanSeconds(playStartTick, nt.startTick);
@@ -5123,6 +5385,8 @@ function tickLoop(){
   view.scrollX = Math.max(0, playheadTick - marginTicks);
   drawGrid(); drawFlagStrip(); updateScrollbars(); updatePosLabel(); updateTimesigLabel();
   if(pitchEditMode) drawPitchOverlay();
+  if(panEditMode) drawPanOverlay();
+  if(volEditMode) drawVolOverlay();
   requestAnimationFrame(tickLoop);
 }
 function updatePosLabel(){
@@ -5145,6 +5409,7 @@ function init(){
   drawAll();
   document.getElementById('modeBtn').textContent='✎';
   updatePitchOverlayInteractivity();
+  setPanEditMode(false);
 }
 window.addEventListener('load', init);
 </script>
