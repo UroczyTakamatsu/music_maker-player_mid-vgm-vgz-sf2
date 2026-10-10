@@ -40,7 +40,7 @@
   #trackGrid div{background:#3a3f4c;border-radius:1px;}
   #trackGrid div.active{background:var(--rec);}
 
-  #topbar2{display:flex;align-items:center;gap:8px;padding:6px 10px 6px calc(var(--keyw,140px) + 5px);background:var(--bg-1);border-bottom:1px solid var(--line);font-size:13px;color:var(--text-dim);}
+  #topbar2{display:flex;align-items:center;gap:8px;padding:6px 10px 6px calc(var(--keyw,140px) + 5px);background:var(--bg-1);border-bottom:1px solid var(--line);font-size:13px;color:var(--text-dim);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}
   #topbar2 #instBtn{position:absolute;left:5px;}
   #tempoLabel + #timesigLabel{margin-left:2px;}
   #timesigLabel{color:var(--accent);font-weight:600;}
@@ -74,6 +74,19 @@
   #pitchSubbar{display:flex;align-items:center;background:var(--bg-1);border-bottom:1px solid var(--line);padding:3px 8px 3px calc(var(--keyw,140px) + 5px);gap:4px;min-height:34px;}
   #pitchSubbar.hidden{display:none;}
   #pitchSubbar .iconbtn{flex:0 0 auto;}
+  #chordSubbar{display:flex;align-items:center;gap:8px;min-height:66px;padding:7px 10px;background:var(--bg-1);border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden;white-space:nowrap;overscroll-behavior-x:contain;scrollbar-width:thin;}
+  #chordSubbar.hidden{display:none;}
+  #chordSubbar .chord-hint{display:none;}
+  #autoChordFillBtn{flex:0 0 auto;height:48px;padding:0 13px;border:1px solid #2f8c75;border-radius:13px;background:linear-gradient(180deg,#176b58,#124b41);color:#eafff8;font-size:12px;font-weight:650;white-space:normal;line-height:1.25;max-width:118px;touch-action:manipulation;}
+  #autoChordFillBtn:active{background:#238c73;}
+  #actualChordLabel{position:absolute;left:calc(var(--keyw,64px) + 8px);top:7px;z-index:7;pointer-events:none;user-select:none;-webkit-user-select:none;padding:5px 9px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(15,17,23,.76);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);color:#f1f4fa;font-size:13px;font-weight:700;letter-spacing:.2px;max-width:calc(100% - 160px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #chordSubbar .chord-list{display:flex;align-items:center;gap:8px;flex:0 0 auto;}
+  .chord-card{flex:0 0 auto;min-width:74px;height:48px;padding:0 14px;border:1px solid #465061;border-radius:13px;background:linear-gradient(180deg,#303644,#252a35);box-shadow:0 2px 4px rgba(0,0,0,.2);font-size:17px;font-weight:650;letter-spacing:.1px;touch-action:none;cursor:grab;}
+  .chord-card:active,.chord-card.previewing{border-color:var(--accent);background:var(--accent-dim);color:#fff;}
+  .chord-card .chord-quality{display:block;font-size:10px;font-weight:400;color:#b7c0cf;margin-top:2px;}
+  .chord-drag-ghost{position:fixed;z-index:1000;pointer-events:none;opacity:.96;transform:translate(-50%,-55%);box-shadow:0 8px 22px rgba(0,0,0,.42);}
+  #chordDropHint{position:fixed;z-index:999;pointer-events:none;padding:4px 8px;border-radius:7px;background:rgba(20,22,28,.9);border:1px solid var(--accent);font-size:11px;color:#fff;display:none;}
+  #chordDropHint.visible{display:block;}
 
   #vScrollTrack{position:absolute;right:0;top:20px;bottom:0;width:21px;background:var(--bg-1);z-index:4;touch-action:none;}
   #vScrollThumb{position:absolute;left:1px;right:1px;background:#454b5c;border-radius:6px;}
@@ -188,17 +201,24 @@
     <button class="iconbtn" id="showOtherTracksBtn" title="他トラック表示">📔</button>
     <button class="iconbtn" id="pitchCurveBtn" title="ピッチカーブ編集">〜</button>
     <button class="iconbtn" id="waveformViewBtn" title="トラックの波形を表示">📈</button>
+    <button class="iconbtn" id="chordSuggestBtn" title="ベースからコード候補を表示">🎼</button>
      <button class="iconbtn" id="panCurveBtn" title="PANオートメーション編集">↔</button>
     <button class="iconbtn" id="volCurveBtn" title="ボリュームオートメーション編集">🔊</button>
+  </div>
+  <div id="chordSubbar" class="hidden" aria-label="コード候補">
+    <button id="autoChordFillBtn" title="ベースの各音に合うコードを表示中のトラックへ自動配置">ベースに合わせて<br>コード自動配置</button>
+    <div class="chord-list" id="chordList"></div>
   </div>
   <div id="pitchSubbar" class="hidden">
     <button class="iconbtn" id="pitchClearBtn" title="ピッチカーブなしにする">√⁻✕</button>
     <button class="iconbtn" id="vibratoBtn" title="ビブラート">〰️</button>
   </div>
 
+  <div id="chordDropHint"></div>
   <div id="rollWrap">
     <div id="flagStrip"><canvas id="flagCanvas"></canvas></div>
     <div id="rollScroll">
+      <div id="actualChordLabel" aria-live="off">コード: —</div>
       <button class="iconbtn" id="rollGridDivBtn" title="グリッド分割">♪</button>
       <canvas id="kbCanvas"></canvas>
       <canvas id="gridCanvas"></canvas>
@@ -1333,12 +1353,412 @@ function updateScrollbars(){
 }
 
 function drawAll(){
-  drawKeyboard(); drawGrid(); drawFlagStrip(); updateScrollbars();
+  drawKeyboard(); drawGrid(); drawChordDragPreview(); drawFlagStrip(); updateScrollbars();
+  updateActualChordLabel(); refreshChordCandidates();
   updateTrackGridUI(); updatePosLabel(); updateTimesigLabel(); updateFlagIdxLabel();
   if(pitchEditMode) drawPitchOverlay();
   if(panEditMode) drawPanOverlay();
   if(volEditMode) drawVolOverlay();
 }
+
+/* ============================================================
+   CHORD SUGGESTIONS — infer candidates from the bass around the left edge,
+   rank them with nearby bass movement and a lightweight key-context estimate.
+   ============================================================ */
+const chordSuggestBtn=document.getElementById('chordSuggestBtn');
+const chordSubbar=document.getElementById('chordSubbar');
+const chordListEl=document.getElementById('chordList');
+const chordHintEl=document.getElementById('chordHint');
+const autoChordFillBtn=document.getElementById('autoChordFillBtn');
+const actualChordLabel=document.getElementById('actualChordLabel');
+const chordDropHint=document.getElementById('chordDropHint');
+let chordBarOpen=false, chordRenderKey='', chordCandidates=[], chordPreviewStopTimer=null, chordGesture=null;
+const CHORD_NAMES=['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+const CHORD_TYPES=[
+  {suffix:'',label:'メジャー',ints:[0,4,7],base:5},
+  {suffix:'m',label:'マイナー',ints:[0,3,7],base:5.2},
+  {suffix:'7',label:'セブンス',ints:[0,4,7,10],base:3.6},
+  {suffix:'maj7',label:'メジャー7',ints:[0,4,7,11],base:2.8},
+  {suffix:'m7',label:'マイナー7',ints:[0,3,7,10],base:3.8},
+  {suffix:'dim',label:'ディミニッシュ',ints:[0,3,6],base:1.8},
+  {suffix:'sus2',label:'サス2',ints:[0,2,7],base:1.8},
+  {suffix:'sus4',label:'サス4',ints:[0,5,7],base:1.8},
+  {suffix:'6',label:'シックス',ints:[0,4,7,9],base:1.4}
+];
+function chordName(root,type){return CHORD_NAMES[((root%12)+12)%12]+type.suffix;}
+// Percussion tracks are not harmonic sources, even though their note numbers are MIDI pitches.
+function isDrumTrackForChords(tr){
+  return !!tr && (tr.instrument===-1 || tr.isDrum===true || tr.trackType==='drum' || tr.type==='drum');
+}
+// Analyze only likely bass tracks (mostly low, predominantly monophonic) and chord tracks
+// (clear simultaneous polyphony). Percussion tracks are always excluded.
+function chordTrackRoles(){
+  const roles=new Map();
+  song.tracks.forEach((tr,ti)=>{
+    if(isDrumTrackForChords(tr))return;
+    const ns=(tr.notes||[]).filter(n=>Number.isFinite(n.pitch)&&Number.isFinite(n.startTick)&&n.pitch<69);
+    if(!ns.length)return;
+    const lowRatio=ns.filter(n=>n.pitch<=60).length/ns.length;
+    const sorted=ns.map(n=>({start:n.startTick,end:n.startTick+Math.max(1,n.lengthTick||gridTicks())}))
+      .sort((a,b)=>a.start-b.start);
+    const prefixMaxEnd=new Array(sorted.length), suffixMinStart=new Array(sorted.length);
+    for(let i=0,maxEnd=-Infinity;i<sorted.length;i++){
+      prefixMaxEnd[i]=maxEnd;
+      maxEnd=Math.max(maxEnd,sorted[i].end);
+    }
+    for(let i=sorted.length-1,minStart=Infinity;i>=0;i--){
+      suffixMinStart[i]=minStart;
+      minStart=Math.min(minStart,sorted[i].start);
+    }
+    let overlapCount=0;
+    for(let i=0;i<sorted.length;i++){
+      if(prefixMaxEnd[i]>sorted[i].start || suffixMinStart[i]<sorted[i].end)overlapCount++;
+    }
+    const polyRatio=overlapCount/ns.length;
+    if(lowRatio>=0.55 && polyRatio<0.28)roles.set(ti,'bass');
+    else if(polyRatio>=0.18)roles.set(ti,'chord');
+  });
+  return roles;
+}
+function isChordAnalysisTrack(ti,roles=null){
+  return (roles||chordTrackRoles()).has(ti);
+}
+function notesNearTick(tick,rangeTicks){
+  const all=[], roles=chordTrackRoles();
+  song.tracks.forEach((tr,ti)=>{
+    if(isDrumTrackForChords(tr)||!isChordAnalysisTrack(ti,roles))return;
+    tr.notes.forEach(n=>{
+    if(!Number.isFinite(n.pitch)||!Number.isFinite(n.startTick)||n.pitch>=69)return; // A4 and above are excluded from chord analysis.
+    const end=n.startTick+Math.max(1,n.lengthTick||gridTicks());
+    const active=tick>=n.startTick&&tick<end;
+    const dist=active?0:Math.abs(n.startTick-tick);
+    if(active||dist<=rangeTicks)all.push({pitch:n.pitch,pc:((n.pitch%12)+12)%12,tick:n.startTick,end,dist,active,track:ti});
+    });
+  });
+  return all;
+}
+function bassEventAt(tick,rangeTicks){
+  const all=notesNearTick(tick,rangeTicks);
+  if(!all.length)return null;
+  const active=all.filter(n=>n.active);
+  const pool=active.length?active:all.filter(n=>n.dist===Math.min(...all.map(x=>x.dist)));
+  const lowPool=pool.filter(n=>n.pitch<=60);
+  const candidates=lowPool.length?lowPool:pool;
+  candidates.sort((a,b)=>a.pitch-b.pitch||a.track-b.track);
+  return candidates[0]||null;
+}
+function nearbyBassEvents(tick,rangeTicks){
+  const all=notesNearTick(tick,rangeTicks).filter(n=>n.pitch<=60);
+  const byTick=new Map();
+  all.forEach(n=>{
+    const key=n.tick;
+    const old=byTick.get(key);
+    if(!old||n.pitch<old.pitch)byTick.set(key,n);
+  });
+  return [...byTick.values()].sort((a,b)=>a.tick-b.tick);
+}
+function inferKeyFromBass(events){
+  if(!events.length)return null;
+  const major=[0,2,4,5,7,9,11],minor=[0,2,3,5,7,8,10];
+  let best=null,bestScore=-1e9;
+  for(let root=0;root<12;root++)for(const mode of ['major','minor']){
+    const scale=(mode==='major'?major:minor).map(x=>(x+root)%12);
+    let score=0;
+    events.forEach(e=>{score+=scale.includes(e.pc)?1: -0.45;});
+    // Favor tonal centers that occur on strong beat-like positions and repeated bass notes.
+    events.forEach(e=>{if(e.pc===root)score+=0.22;});
+    if(score>bestScore){bestScore=score;best={root,mode,scale,score};}
+  }
+  return best;
+}
+function progressionMoveScore(root,neighborPc,side){
+  if(neighborPc==null)return 0;
+  const forward=(root-neighborPc+12)%12;
+  const backward=(neighborPc-root+12)%12;
+  const interval=side==='prev'?forward:backward;
+  // Reward fifths/fourths and stepwise bass-root movement; avoid treating this as a hard rule.
+  if(interval===5||interval===7)return 1.05;
+  if(interval===2||interval===10)return 0.72;
+  if(interval===3||interval===4||interval===8||interval===9)return 0.42;
+  if(interval===0)return 0.2;
+  return -0.12;
+}
+function getChordCandidates(atTick=null){
+  // While playback is running, analyze the actual playhead tick rather than the
+  // piano roll's left edge (which is scrolled ahead to keep the playhead visible).
+  // When stopped, keep the existing behavior of analyzing the visible left edge.
+  const gt=gridTicks(), tick=atTick==null
+    ? (playing ? Math.max(0,playheadTick) : Math.max(0,Math.floor(view.scrollX/gt)*gt))
+    : Math.max(0,atTick);
+  const measureTicks=PPQ*4*(tsForMeasure(tickToMeasure(tick)).num/tsForMeasure(tickToMeasure(tick)).den);
+  const span=Math.max(gt*2,measureTicks*4);
+  const events=nearbyBassEvents(tick,span);
+  const target=bassEventAt(tick,Math.max(span,gt*2));
+  if(!target)return {tick,target:null,items:[],key:null};
+  const pc=target.pc;
+  const key=inferKeyFromBass(events);
+  const prev=events.filter(e=>e.tick<target.tick).slice(-1)[0];
+  const next=events.find(e=>e.tick>target.tick);
+  const items=[];
+  for(let root=0;root<12;root++)for(const type of CHORD_TYPES){
+    if(!type.ints.some(i=>(root+i)%12===pc))continue;
+    let score=type.base;
+    const bassRole=(pc-root+12)%12;
+    score+=bassRole===0?3.0:(bassRole===3||bassRole===4)?1.15:(bassRole===7)?0.85:0.15;
+    if(key){
+      const fit=type.ints.reduce((sum,i)=>sum+(key.scale.includes((root+i)%12)?1:-0.85),0);
+      score+=fit*0.58;
+      if(key.scale.includes(root))score+=0.45;
+      if((key.mode==='major'&&type.suffix===''&&[0,5,7].includes((root-key.root+12)%12)) ||
+         (key.mode==='minor'&&type.suffix==='m'&&[0,3,7].includes((root-key.root+12)%12)))score+=0.65;
+      // In a minor key, the dominant chord (V) is commonly major so it resolves
+      // strongly to the tonic. For example, in E minor prefer B over Bm between C and Em.
+      if(key.mode==='minor' && type.suffix==='' && (root-key.root+12)%12===7)score+=2.6;
+    }
+    if(prev)score+=progressionMoveScore(root,prev.pc,'prev')*0.65;
+    if(next)score+=progressionMoveScore(root,next.pc,'next')*0.85;
+    // Chords built on the bass root are easier to read and are often the most useful first options.
+    if(root===pc)score+=0.75;
+    items.push({root,type,name:chordName(root,type),score,tones:type.ints.map(i=>(root+i)%12),bassPc:pc});
+  }
+  items.sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name));
+  // Keep the bar useful on a phone: show a concise but varied top set.
+  const chosen=[]; const seen=new Set();
+  for(const c of items){
+    const key2=c.root+':'+c.type.suffix;
+    if(seen.has(key2))continue;
+    chosen.push(c);seen.add(key2);
+    if(chosen.length>=12)break;
+  }
+  return {tick,target,items:chosen,key};
+}
+function refreshChordCandidates(force=false){
+  if(!chordBarOpen)return;
+  const result=getChordCandidates();
+  const sig=[result.tick,result.target&&result.target.pitch,result.items.map(c=>c.name).join(','),result.key&&result.key.root,result.key&&result.key.mode].join('|');
+  if(!force&&sig===chordRenderKey)return;
+  chordRenderKey=sig;chordCandidates=result.items;
+  chordListEl.replaceChildren();
+  if(!result.target){
+    if(chordHintEl)chordHintEl.textContent='左端付近にベース音がありません';
+    return;
+  }
+  const keyText=result.key?(' / 推定 '+CHORD_NAMES[result.key.root]+(result.key.mode==='major'?'メジャー':'マイナー')):'';
+  if(chordHintEl)chordHintEl.textContent=noteName(result.target.pitch)+' を基準に提案'+keyText;
+  result.items.forEach((c,idx)=>{
+    const b=document.createElement('button');b.type='button';b.className='chord-card';b.dataset.chordIndex=String(idx);b.dataset.chordName=c.name;
+    b.textContent=c.name;b.title=c.name+'（'+c.type.label+'）';
+    b.setAttribute('aria-label',c.name+' コードを試聴。長押ししてピアノロールに配置');
+    chordListEl.appendChild(b);attachChordCardGesture(b,c);
+  });
+}
+function chordAtTickAcrossTracks(tick){
+  const pcs=new Set(), active=[], roles=chordTrackRoles();
+  song.tracks.forEach((tr,ti)=>{
+    if(isDrumTrackForChords(tr)||!isChordAnalysisTrack(ti,roles))return;
+    tr.notes.forEach(n=>{
+      const end=n.startTick+Math.max(1,n.lengthTick||gridTicks());
+      if(n.startTick<=tick&&tick<end&&Number.isFinite(n.pitch)&&n.pitch<69){
+        pcs.add(((n.pitch%12)+12)%12); active.push({pitch:n.pitch,track:ti});
+      }
+    });
+  });
+  if(!pcs.size)return null;
+  if(pcs.size===1)return {name:'単音 '+CHORD_NAMES[[...pcs][0]],confidence:false};
+  let best=null;
+  for(let root=0;root<12;root++)for(const type of CHORD_TYPES){
+    const tones=new Set(type.ints.map(i=>(root+i)%12));
+    let hit=0,extra=0;
+    pcs.forEach(pc=>{if(tones.has(pc))hit++;else extra++;});
+    const missing=[...tones].filter(pc=>!pcs.has(pc)).length;
+    const score=hit*2.2-extra*1.35-missing*.48+((pcs.has(root))?0.45:0);
+    if(!best||score>best.score)best={root,type,score,hit,extra,missing};
+  }
+  // Avoid displaying a confident chord name when the active notes don't support one.
+  if(!best||best.hit<Math.min(2,pcs.size)||best.score<1.7)return {name:'構成音 '+[...pcs].sort((a,b)=>a-b).map(pc=>CHORD_NAMES[pc]).join(' '),confidence:false};
+  return {name:chordName(best.root,best.type),confidence:true};
+}
+let actualChordLabelCache='';
+let lastPlaybackChordBucket=null;
+function updateActualChordLabel(){
+  if(!actualChordLabel)return;
+  const t=playing?playheadTick:Math.max(0,view.scrollX);
+  const chord=chordAtTickAcrossTracks(t);
+  const label='コード: '+(chord?chord.name:'—');
+  if(label!==actualChordLabelCache){actualChordLabel.textContent=label;actualChordLabelCache=label;}
+  actualChordLabel.title=playing?'再生位置バーの位置でコード判定':'表示左端の位置でコード判定';
+}
+function drawChordDragPreview(){
+  const g=chordGesture;
+  if(!g||!g.dragging||!gridCanvas)return;
+  const r=gridCanvas.getBoundingClientRect();
+  if(g.lastX<r.left||g.lastX>r.right||g.lastY<r.top||g.lastY>r.bottom)return;
+  const x=g.lastX-r.left,y=g.lastY-r.top;
+  const startTick=floorTick(Math.max(0,xToTick(x))),dropPitch=yToNote(y);
+  const rootPitch=nearestChordRootPitch(g.chord,dropPitch),gt=gridTicks();
+  const ctx=gridCanvas.getContext('2d'),rowH=view.rowH;
+  const x0=tickToX(startTick),w=Math.max(2,gt*view.pxPerTick-1);
+  ctx.save();
+  g.chord.type.ints.forEach(i=>{
+    const pitch=rootPitch+i;if(pitch<NOTE_MIN||pitch>NOTE_MAX)return;
+    const yy=noteToY(pitch);
+    ctx.fillStyle='rgba(119,190,255,.30)';ctx.strokeStyle='rgba(165,218,255,.88)';ctx.lineWidth=1.5;
+    ctx.fillRect(x0,yy+2,w,Math.max(2,rowH-4));ctx.strokeRect(x0+.5,yy+2.5,Math.max(1,w-1),Math.max(1,rowH-5));
+  });
+  ctx.restore();
+}
+function previewChord(chord,basePitch=null){
+  if(!chord)return;
+  ensureAudio();
+  try{if(actx.state==='suspended')actx.resume();}catch(_){}
+  if(chordPreviewStopTimer)clearTimeout(chordPreviewStopTimer);
+  stopAllPreviewVoices();
+  const previewTrack=isDrumTrackForChords(song.tracks[song.activeTrack])
+    ? song.tracks.findIndex(tr=>!isDrumTrackForChords(tr)) : song.activeTrack;
+  if(previewTrack<0)return;
+  const rootPitch=basePitch==null?(60+((chord.root-0+12)%12)):basePitch;
+  chord.type.ints.forEach(i=>playPreview(previewTrack,rootPitch+i));
+  chordPreviewStopTimer=setTimeout(()=>{stopAllPreviewVoices();chordPreviewStopTimer=null;},850);
+}
+function nearestChordRootPitch(chord,dropPitch){
+  const pc=chord.root;
+  const octaveBase=Math.floor((dropPitch-pc)/12);
+  const candidates=[(octaveBase-1)*12+pc,octaveBase*12+pc,(octaveBase+1)*12+pc,(octaveBase+2)*12+pc].filter(n=>n>=NOTE_MIN&&n<=NOTE_MAX);
+  if(!candidates.length)return Math.max(NOTE_MIN,Math.min(NOTE_MAX,pc+12*Math.round((dropPitch-pc)/12)));
+  return candidates.sort((a,b)=>Math.abs(a-dropPitch)-Math.abs(b-dropPitch))[0];
+}
+function placeSuggestedChord(chord,clientX,clientY){
+  const rect=gridCanvas.getBoundingClientRect();
+  if(clientX<rect.left||clientX>rect.right||clientY<rect.top||clientY>rect.bottom)return false;
+  const x=clientX-rect.left,y=clientY-rect.top;
+  const startTick=floorTick(Math.max(0,xToTick(x))),dropPitch=yToNote(y);
+  const rootPitch=nearestChordRootPitch(chord,dropPitch),gt=gridTicks();
+  const tr=song.tracks[song.activeTrack];
+  if(isDrumTrackForChords(tr)){
+    chordDropHint.textContent='ドラムトラックにはコードを配置できません';
+    return false;
+  }
+  const before=snapshotNotes();
+  const tones=chord.type.ints.map(i=>rootPitch+i).filter(n=>n>=NOTE_MIN&&n<=NOTE_MAX);
+  tones.forEach(pitch=>tr.notes.push({id:noteIdSeq++,pitch,startTick,lengthTick:gt,velocity:100}));
+  selection.clear();
+  pushUndoIfChanged(before);invalidateVoiceStealCache(song.activeTrack);drawAll();
+  return true;
+}
+function attachChordCardGesture(button,chord){
+  button.addEventListener('pointerdown',e=>{
+    if(e.button!==undefined&&e.button!==0)return;
+    e.preventDefault();
+    const cardRect=button.getBoundingClientRect();
+    chordGesture={pointerId:e.pointerId,button,chord,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,startScroll:chordSubbar.scrollLeft,moved:false,dragging:false,ghost:null,timer:null};
+    const g=chordGesture;
+    g.timer=setTimeout(()=>{
+      if(chordGesture!==g||g.moved)return;
+      g.dragging=true;
+      g.ghost=button.cloneNode(true);g.ghost.classList.add('chord-drag-ghost');
+      g.ghost.style.width=cardRect.width+'px';g.ghost.style.left=g.lastX+'px';g.ghost.style.top=g.lastY+'px';document.body.appendChild(g.ghost);
+      chordDropHint.textContent='ピアノロールにドロップ';chordDropHint.classList.add('visible');
+      navigator.vibrate&&navigator.vibrate(10);
+    },LONG_PRESS_MS);
+  });
+}
+function chordGestureMove(e){
+  const g=chordGesture;if(!g||e.pointerId!==g.pointerId)return;
+  g.lastX=e.clientX;g.lastY=e.clientY;
+  const dx=e.clientX-g.startX,dy=e.clientY-g.startY;
+  if(!g.dragging&&(Math.abs(dx)>9||Math.abs(dy)>12)){
+    g.moved=true;clearTimeout(g.timer);
+    // Horizontal finger movement scrolls the candidate strip.
+    if(Math.abs(dx)>Math.abs(dy))chordSubbar.scrollLeft=g.startScroll-dx;
+  }
+  if(g.dragging){
+    e.preventDefault();g.ghost.style.left=e.clientX+'px';g.ghost.style.top=e.clientY+'px';
+    chordDropHint.style.left=Math.min(window.innerWidth-150,e.clientX+12)+'px';chordDropHint.style.top=Math.max(4,e.clientY+18)+'px';
+    const r=gridCanvas.getBoundingClientRect();chordDropHint.textContent=(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom)?'ここに配置':'ピアノロール上へ';
+    drawGrid();drawChordDragPreview();
+  }
+}
+function chordGestureEnd(e){
+  const g=chordGesture;if(!g||e.pointerId!==g.pointerId)return;
+  clearTimeout(g.timer);
+  if(g.dragging){
+    placeSuggestedChord(g.chord,e.clientX,e.clientY);
+    g.ghost&&g.ghost.remove();chordDropHint.classList.remove('visible');
+    drawGrid();
+  }else if(!g.moved){
+    previewChord(g.chord);
+    g.button.classList.add('previewing');setTimeout(()=>g.button&&g.button.classList.remove('previewing'),180);
+  }
+  chordGesture=null;
+}
+document.addEventListener('pointermove',chordGestureMove,{passive:false});
+document.addEventListener('pointerup',chordGestureEnd);
+document.addEventListener('pointercancel',chordGestureEnd);
+function autoPlaceChordsForBass(){
+  const start=Math.max(0,Math.floor(view.scrollX/gridTicks())*gridTicks());
+  const activeTrack=song.tracks[song.activeTrack];
+  if(isDrumTrackForChords(activeTrack)){
+    autoChordFillBtn.title='コードを配置するにはメロディ用トラックを選択してください';
+    setTimeout(()=>autoChordFillBtn.title='ベースの各音に合うコードを表示中のトラックへ自動配置',2200);
+    return;
+  }
+  const roles=chordTrackRoles();
+  const bassTrackIndices=[...roles.entries()].filter(([,role])=>role==='bass').map(([ti])=>ti);
+  const rawBassEvents=[];
+  bassTrackIndices.forEach(ti=>{
+    const tr=song.tracks[ti];
+    (tr.notes||[]).forEach(n=>{
+      if(Number.isFinite(n.pitch)&&n.pitch<=60&&n.pitch<69&&Number.isFinite(n.startTick)&&n.startTick>=start){
+        rawBassEvents.push({pitch:n.pitch,pc:((n.pitch%12)+12)%12,tick:n.startTick,end:n.startTick+Math.max(1,n.lengthTick||gridTicks()),track:ti});
+      }
+    });
+  });
+  const events=rawBassEvents;
+  if(!events.length){
+    autoChordFillBtn.title='表示左端以降にベース音が見つかりません';
+    setTimeout(()=>autoChordFillBtn.title='ベースの各音に合うコードを表示中のトラックへ自動配置',1800);
+    return;
+  }
+  // Collapse simultaneous bass notes to the lowest pitch, then avoid duplicating a chord
+  // when multiple source tracks contain the same bass event.
+  const byTick=new Map();
+  events.forEach(e=>{const old=byTick.get(e.tick);if(!old||e.pitch<old.pitch)byTick.set(e.tick,e);});
+  const bassEvents=[...byTick.values()].sort((a,b)=>a.tick-b.tick);
+  const before=snapshotNotes();let added=0;let previousRootPitch=null;
+  bassEvents.forEach((bass,idx)=>{
+    const result=getChordCandidates(bass.tick);
+    if(!result.items.length)return;
+    const chord=result.items[0];
+    const sourceEnd=Math.max(bass.tick+gridTicks(),bass.end||bass.tick+gridTicks());
+    const next=bassEvents[idx+1];
+    const duration=Math.max(gridTicks(),Math.min(sourceEnd,next?next.tick:sourceEnd)-bass.tick);
+    // Keep roots in octave 3 by default, but preserve smooth voice-leading across
+    // the C/B boundary when the octave-equivalent root is within 3 semitones.
+    const baseRootPitch=48+((chord.root%12)+12)%12;
+    let rootPitch=baseRootPitch;
+    if(previousRootPitch!==null){
+      const candidates=[baseRootPitch-12,baseRootPitch,baseRootPitch+12];
+      let nearest=candidates[0];
+      for(const candidate of candidates){if(Math.abs(candidate-previousRootPitch)<Math.abs(nearest-previousRootPitch))nearest=candidate;}
+      if(Math.abs(nearest-previousRootPitch)<=3)rootPitch=nearest;
+    }
+    previousRootPitch=rootPitch;
+    chord.type.ints.forEach(i=>{
+      const pitch=rootPitch+i;if(pitch<NOTE_MIN||pitch>NOTE_MAX)return;
+      const duplicate=activeTrack.notes.some(n=>n.startTick===bass.tick&&n.pitch===pitch);
+      if(duplicate)return;
+      activeTrack.notes.push({id:noteIdSeq++,pitch,startTick:bass.tick,lengthTick:duration,velocity:88});added++;
+    });
+  });
+  if(added){selection.clear();pushUndoIfChanged(before);invalidateVoiceStealCache(song.activeTrack);drawAll();}
+  autoChordFillBtn.title=added?`コードノートを ${added} 個配置しました`:'配置するコードノートはありませんでした';
+  setTimeout(()=>autoChordFillBtn.title='ベースの各音に合うコードを表示中のトラックへ自動配置',2200);
+}
+autoChordFillBtn.addEventListener('click',autoPlaceChordsForBass);
+chordSuggestBtn.addEventListener('click',()=>{
+  chordBarOpen=!chordBarOpen;chordSubbar.classList.toggle('hidden',!chordBarOpen);chordSuggestBtn.classList.toggle('active',chordBarOpen);
+  if(chordBarOpen){chordRenderKey='';refreshChordCandidates(true);}else{chordRenderKey='';}
+});
 
 /* ============================================================
    POINTER INTERACTION — grid (note input / select)
@@ -1452,11 +1872,10 @@ function onGridDown(e){
   if(hitNote){
     const noteStartX = tickToX(hitNote.startTick);
     const noteWidthPx = hitNote.lengthTick*view.pxPerTick;
-    // Only the actual right edge resizes. The rest of the note always follows
-    // the finger, which makes touch dragging predictable.
-    const edgePx = Math.min(10, Math.max(4, noteWidthPx*0.18));
+    // Split the note hit area into two equal halves: left half moves the note,
+    // right half adjusts its length. Keep this relative to the note's visible bounds.
     pointerDownInfo.action =
-      p.x >= noteStartX + Math.max(0, noteWidthPx-edgePx) ? 'resize' : 'move';
+      p.x >= noteStartX + noteWidthPx*0.5 ? 'resize' : 'move';
     return;
   }
 
@@ -1505,7 +1924,10 @@ function onGridMove(e){
   const p = localPos(e);
   lastPointerPos = p;
   if(!pointerDownInfo) return;
-  const justCrossed = !pointerDownInfo.moved && (Math.abs(p.x-pointerDownInfo.p.x)>MOVE_THRESHOLD_PX || Math.abs(p.y-pointerDownInfo.p.y)>MOVE_THRESHOLD_PX);
+  // Rubber-band selection is a long-press gesture, so allow more natural finger jitter
+  // before cancelling it. Keep the tighter threshold for note placement/movement.
+  const gestureThreshold = (mode==='select' && !pointerDownInfo.hitNote) ? 12 : MOVE_THRESHOLD_PX;
+  const justCrossed = !pointerDownInfo.moved && (Math.abs(p.x-pointerDownInfo.p.x)>gestureThreshold || Math.abs(p.y-pointerDownInfo.p.y)>gestureThreshold);
   if(justCrossed){
     pointerDownInfo.moved = true;
     clearTimeout(longPressTimer);
@@ -5383,7 +5805,13 @@ function tickLoop(){
   const gw = gridCanvas.width/(window.devicePixelRatio||1);
   const marginTicks = (gw*0.15)/view.pxPerTick; // keep the playhead ~15% in from the left edge
   view.scrollX = Math.max(0, playheadTick - marginTicks);
-  drawGrid(); drawFlagStrip(); updateScrollbars(); updatePosLabel(); updateTimesigLabel();
+  drawGrid(); drawChordDragPreview(); drawFlagStrip(); updateScrollbars(); updatePosLabel(); updateTimesigLabel();
+  const chordBucket=floorTick(Math.max(0,playheadTick));
+  if(chordBucket!==lastPlaybackChordBucket){
+    lastPlaybackChordBucket=chordBucket;
+    updateActualChordLabel();
+    refreshChordCandidates();
+  }
   if(pitchEditMode) drawPitchOverlay();
   if(panEditMode) drawPanOverlay();
   if(volEditMode) drawVolOverlay();
