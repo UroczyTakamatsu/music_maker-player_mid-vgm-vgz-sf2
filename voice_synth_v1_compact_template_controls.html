@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Voice Synth v1</title>
+<style>
+:root{--bg:#10131a;--panel:#181d27;--panel2:#202735;--text:#eef2f7;--muted:#9aa6b7;--accent:#7dd3fc;--accent2:#c4b5fd;--danger:#fb7185}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#0d1117,#151a23);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}
+button,input,select{font:inherit}
+button{border:0;border-radius:10px;padding:9px 12px;background:var(--panel2);color:var(--text);cursor:pointer}
+button:hover{filter:brightness(1.15)}
+button.primary{background:var(--accent);color:#071018;font-weight:700}
+button.active{outline:2px solid var(--accent)}
+.app{max-width:1100px;margin:auto;padding:16px}
+.toolbar,.controls,.preview,.advanced{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.card{background:rgba(24,29,39,.96);border:1px solid #2b3444;border-radius:16px;padding:14px;margin-bottom:12px}
+label{color:var(--muted);font-size:13px}
+.control{display:flex;flex-direction:column;gap:5px;min-width:130px}
+input[type=number],select{background:#0f141c;border:1px solid #344052;color:var(--text);border-radius:9px;padding:8px}
+input[type=range]{accent-color:var(--accent);width:160px}
+#spectrum{width:100%;height:330px;display:block;background:#0c1016;border-radius:12px;touch-action:none}
+#wave{width:100%;height:150px;display:block;background:#0c1016;border-radius:12px}
+.vowel-tabs{display:flex;gap:4px}
+.vowel-tab{flex:1;min-width:34px;padding:7px 10px;border:1px solid #344052;background:#0f141c}
+.vowel-tab.active{background:var(--accent2);color:#10131a;outline:2px solid var(--accent2);font-weight:700}
+.spectrum-editor{border:1px solid #39465a;border-radius:12px;overflow:hidden;background:#0c1016}
+.spectrum-editor .vowel-tabs{gap:0;padding:5px 5px 0;background:#151b25;border-bottom:1px solid #39465a}
+.spectrum-editor .vowel-tab{border:1px solid transparent;border-radius:8px 8px 0 0;background:transparent;color:var(--muted);padding:8px 10px}
+.spectrum-editor .vowel-tab.active{background:#0c1016;color:var(--accent2);border-color:#39465a;border-bottom-color:#0c1016;outline:none}
+.spectrum-editor #spectrum{border-radius:0}
+.spectrum-tools{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.spectrum-tools button{padding:5px 9px}
+.spectrum-tools button:disabled{opacity:.35;cursor:default}
+.inline-select{display:flex;align-items:center;gap:8px}
+.inline-select select{padding:5px 8px}
+.preview-inline{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.preview-notes{display:flex;align-items:center;gap:5px;width:100%}
+.preview-notes [data-note]{flex:1;min-width:0;padding:7px 3px}
+.octave-btn{flex:0 0 34px;padding:7px 0!important;font-size:18px}
+.preview-actions{display:flex;gap:7px}
+.preview-actions button{flex:1}
+.template-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.voice-tabs{display:flex;gap:4px}
+.voice-tab{padding:6px 12px;border:1px solid #344052;background:#0f141c}
+.voice-tab.active{background:var(--accent2);color:#10131a;outline:2px solid var(--accent2);font-weight:700}
+.template-vowels{display:flex;gap:6px;margin-bottom:12px}
+.template-vowels button{flex:1}
+.footer-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #2b3444}
+.footer-actions button{flex:1}
+@media(max-width:650px){#spectrum{height:200px}.vowel-control{min-width:100%;}.vowel-tabs{width:100%}.preview-inline{gap:5px}.preview-notes{gap:3px}.preview-notes [data-note]{font-size:12px;padding:7px 1px}.octave-btn{flex-basis:30px}.template-heading{align-items:center}.voice-tab{padding:6px 9px}}
+.legend{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:6px}
+.pill{padding:4px 8px;border-radius:999px;background:#273142;color:#cbd5e1;font-size:12px}
+.note{color:var(--muted);font-size:13px;line-height:1.5}
+.rowtitle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+#phaseGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.phaseItem{background:#111720;padding:8px;border-radius:10px}
+.phaseItem label{display:block;margin-bottom:5px}
+.phaseItem input{width:100%}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#e8eef6;color:#10151d;padding:10px 15px;border-radius:999px;opacity:0;pointer-events:none;transition:.2s}
+.toast.show{opacity:1}
+@media(max-width:650px){.app{padding:10px}.card{padding:11px}.control{min-width:105px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="card">
+    <div class="template-heading">
+      <strong>テンプレート生成</strong>
+      <div class="voice-tabs" role="tablist" aria-label="声のタイプ">
+        <button type="button" class="voice-tab active" data-voice="male" role="tab" aria-selected="true">男声</button>
+        <button type="button" class="voice-tab" data-voice="female" role="tab" aria-selected="false">女声</button>
+      </div>
+    </div>
+    <div class="template-vowels" aria-label="母音テンプレート">
+      <button type="button" data-template-vowel="a">あ</button>
+      <button type="button" data-template-vowel="i">い</button>
+      <button type="button" data-template-vowel="u">う</button>
+      <button type="button" data-template-vowel="e">え</button>
+      <button type="button" data-template-vowel="o">お</button>
+    </div>
+
+    <div class="rowtitle">
+      <strong>倍音スペクトル</strong>
+      <div class="spectrum-tools">
+        <button type="button" id="undoBtn" disabled aria-label="スペクトル編集を元に戻す">↶ Undo</button>
+        <button type="button" id="redoBtn" disabled aria-label="スペクトル編集をやり直す">↷ Redo</button>
+        <label class="inline-select">表示倍音
+          <select id="visibleCount" aria-label="表示倍音"><option>16</option><option>32</option><option selected>64</option><option>128</option><option>256</option></select>
+        </label>
+      </div>
+    </div>
+    <div class="spectrum-editor">
+      <div class="vowel-tabs" role="tablist" aria-label="スペクトルの母音">
+        <button type="button" class="vowel-tab active" data-vowel="a" role="tab" aria-selected="true">あ</button>
+        <button type="button" class="vowel-tab" data-vowel="i" role="tab" aria-selected="false">い</button>
+        <button type="button" class="vowel-tab" data-vowel="u" role="tab" aria-selected="false">う</button>
+        <button type="button" class="vowel-tab" data-vowel="e" role="tab" aria-selected="false">え</button>
+        <button type="button" class="vowel-tab" data-vowel="o" role="tab" aria-selected="false">お</button>
+      </div>
+      <canvas id="spectrum"></canvas>
+    </div>
+    <div class="preview-inline" aria-label="プレビュー">
+      <div class="preview-notes">
+        <button type="button" id="octaveDown" class="octave-btn" aria-label="1オクターブ下げる">◀</button>
+        <button data-note="261.625565" data-note-name="C" data-base-octave="4">C4</button><button data-note="293.664768" data-note-name="D" data-base-octave="4">D4</button>
+        <button data-note="329.627557" data-note-name="E" data-base-octave="4">E4</button><button data-note="349.228231" data-note-name="F" data-base-octave="4">F4</button>
+        <button data-note="391.995436" data-note-name="G" data-base-octave="4">G4</button><button data-note="440" data-note-name="A" data-base-octave="4">A4</button>
+        <button data-note="493.883301" data-note-name="B" data-base-octave="4">B4</button><button data-note="523.251131" data-note-name="C" data-base-octave="5">C5</button>
+        <button type="button" id="octaveUp" class="octave-btn" aria-label="1オクターブ上げる">▶</button>
+      </div>
+      <div class="preview-actions">
+        <button id="aPreview" class="primary">「あーーー」</button>
+        <button id="stopPreview">停止</button>
+      </div>
+    </div>
+    <div class="footer-actions">
+      <button id="resetBtn">リセット</button>
+      <button id="saveBtn">.voice 保存</button>
+      <button id="loadBtn">.voice 読込</button>
+      <input id="fileInput" type="file" accept=".voice,.json,application/json" hidden>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="rowtitle"><strong>波形</strong><span class="pill">現在の基音1周期</span></div>
+    <canvas id="wave"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="rowtitle"><strong>位相（上級者向け）</strong><button id="phaseToggle">表示</button></div>
+    <div id="phaseArea" hidden>
+      <p class="note">通常は「標準」でOK。各倍音の位相を度数で変更できます。v1では位相は音量とは独立した上級設定として保存します。</p>
+      <div class="advanced">
+        <button id="phaseZero">全倍音を0°</button>
+        <button id="phaseRandom">ランダム位相</button>
+      </div>
+      <div id="phaseGrid"></div>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+const MAX_HARMONICS=256;
+const VOWELS={
+  a:{F1:800,F2:1200,F3:2600},
+  i:{F1:300,F2:2500,F3:3000},
+  u:{F1:350,F2:1500,F3:2500},
+  e:{F1:500,F2:2000,F3:2800},
+  o:{F1:500,F2:1000,F3:2500}
+};
+const state={
+  format:"urochi-voice",version:1,name:"Untitled Voice",
+  voiceType:"male",fundamental:130,currentVowel:"a",
+  harmonics:Array(MAX_HARMONICS).fill(0),
+  phases:Array(MAX_HARMONICS).fill(0),
+  vowels:{a:null,i:null,u:null,e:null,o:null},
+  phasePreset:"zero"
+};
+state.harmonics[0]=1;
+
+const spectrum=document.getElementById("spectrum"), sctx=spectrum.getContext("2d");
+const wave=document.getElementById("wave"), wctx=wave.getContext("2d");
+let audioCtx=null, osc=null, gain=null, previewTimer=null, dragging=false;
+const undoHistory=[], redoHistory=[];
+let dragStartSnapshot=null;
+const HISTORY_LIMIT=100;
+
+function resizeCanvas(c){
+  const r=c.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  c.width=Math.max(1,Math.floor(r.width*d)); c.height=Math.max(1,Math.floor(r.height*d));
+  c._d=d;
+}
+function toast(t){const e=document.getElementById("toast");e.textContent=t;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),1400)}
+
+function currentArray(){ return state.vowels[state.currentVowel] || state.harmonics; }
+
+function clone(a){return Array.from(a);}
+function snapshotState(){
+  return {harmonics:clone(state.harmonics),vowels:Object.fromEntries(Object.entries(state.vowels).map(([k,v])=>[k,v?clone(v):null])),currentVowel:state.currentVowel};
+}
+function restoreSnapshot(s){
+  state.harmonics=clone(s.harmonics);
+  state.vowels=Object.fromEntries(Object.entries(s.vowels).map(([k,v])=>[k,v?clone(v):null]));
+  state.currentVowel=s.currentVowel;
+  setVowelTabs(state.currentVowel);render();updateAudio();updateHistoryButtons();
+}
+function updateHistoryButtons(){
+  document.getElementById('undoBtn').disabled=undoHistory.length===0;
+  document.getElementById('redoBtn').disabled=redoHistory.length===0;
+}
+function clearHistory(){undoHistory.length=0;redoHistory.length=0;dragStartSnapshot=null;updateHistoryButtons()}
+function pushUndoSnapshot(s){
+  undoHistory.push(s);if(undoHistory.length>HISTORY_LIMIT)undoHistory.shift();
+  redoHistory.length=0;updateHistoryButtons();
+}
+
+function spectralEnvelope(freq, type, vowel){
+  const v=VOWELS[vowel], scale=type==="female"?1.12:1.0;
+  const f1=v.F1*scale,f2=v.F2*scale,f3=v.F3*scale;
+  const out=[];
+  for(let n=1;n<=MAX_HARMONICS;n++){
+    const f=state.fundamental*n;
+    // 「い」「う」は基音に対する整数倍音の比率を高め、
+    // 基音付近から高次倍音までの周期性を保ちやすくする。
+    const vowelHarmonicBoost = (vowel==="i" || vowel==="u")
+      ? (0.72 + 0.28 / Math.pow(n, 0.18))
+      : 1.0;
+    // Gentle glottal spectral tilt plus three broad formant peaks.
+    const tilt=1/Math.pow(n,0.72);
+    const g=(fc,bw,amp)=>amp*Math.exp(-0.5*Math.pow((f-fc)/bw,2));
+    let x=0.045 + tilt*(1.0 + g(f1,130,2.6)+g(f2,210,2.1)+g(f3,300,0.8));
+    x *= vowelHarmonicBoost;
+    out.push(x);
+  }
+  const base=out[0]||1;
+  return out.map(x=>Math.max(0,Math.min(1.6,x/base)));
+}
+
+function generateVowel(v){
+  const old=state.currentVowel; state.currentVowel=v;
+  const arr=spectralEnvelope(state.fundamental,state.voiceType,v);
+  state.vowels[v]=arr;
+  if(v==="a") state.harmonics=clone(arr);
+  state.currentVowel=old;
+  render();
+}
+function generateAll(){
+  for(const v of Object.keys(VOWELS)) state.vowels[v]=spectralEnvelope(state.fundamental,state.voiceType,v);
+  state.harmonics=clone(state.vowels[state.currentVowel]||state.vowels.a);
+  render(); updateAudio(); toast("5母音を生成しました");
+}
+
+function makePeriodicWave(){
+  if(!audioCtx) return null;
+  const a=currentArray();
+  const real=new Float32Array(MAX_HARMONICS+1);
+  const imag=new Float32Array(MAX_HARMONICS+1);
+  for(let n=1;n<=MAX_HARMONICS;n++){
+    const amp=(a[n-1]??0);
+    const ph=(state.phases[n-1]||0)*Math.PI/180;
+    real[n]=amp*Math.sin(ph);
+    imag[n]=amp*Math.cos(ph);
+  }
+  return audioCtx.createPeriodicWave(real,imag,{disableNormalization:true});
+}
+async function ensureAudio(){
+  if(!audioCtx){
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    osc=audioCtx.createOscillator(); gain=audioCtx.createGain();
+    gain.gain.value=0.12;
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.frequency.value=state.fundamental;
+    osc.setPeriodicWave(makePeriodicWave());
+    osc.start();
+  }
+  if(audioCtx.state==="suspended") await audioCtx.resume();
+}
+async function updateAudio(freq=state.fundamental){
+  if(!audioCtx) return;
+  const now=audioCtx.currentTime;
+  osc.setPeriodicWave(makePeriodicWave());
+  osc.frequency.cancelScheduledValues(now);
+  osc.frequency.setTargetAtTime(freq,now,0.012);
+}
+function setFrequency(f){state.fundamental=f;updateAudio(f);renderWave()}
+
+function drawSpectrum(){
+  resizeCanvas(spectrum);
+  const d=spectrum._d,w=spectrum.width,h=spectrum.height;
+  sctx.clearRect(0,0,w,h);
+  sctx.fillStyle="#0c1016";sctx.fillRect(0,0,w,h);
+  const count=+document.getElementById("visibleCount").value, scale="linear";
+  const arr=currentArray();
+  const pad={l:38,r:10,t:12,b:28}, pw=w-pad.l-pad.r, ph=h-pad.t-pad.b;
+  sctx.strokeStyle="#293344";sctx.lineWidth=1*d;
+  for(let i=0;i<=4;i++){const y=pad.t+ph*i/4;sctx.beginPath();sctx.moveTo(pad.l,y);sctx.lineTo(w-pad.r,y);sctx.stroke()}
+  sctx.fillStyle="#8f9bad";sctx.font=`${12*d}px system-ui`;
+  for(let i=0;i<=4;i++){let txt=scale==="db"?`${-i*20} dB`:`${100-i*25}%`;sctx.fillText(txt,4,pad.t+ph*i/4+4*d)}
+  const bw=pw/count;
+  for(let n=1;n<=count;n++){
+    const a=Math.max(0,arr[n-1]||0);
+    let norm=scale==="db" ? Math.max(0,(20*Math.log10(Math.max(a,1e-4))+80)/80) : Math.min(1,a);
+    const bh=norm*ph;
+    sctx.fillStyle=n===1?"#c4b5fd":"#7dd3fc";
+    sctx.fillRect(pad.l+(n-1)*bw+Math.max(1,bw*.14),pad.t+ph-bh,Math.max(2,bw*.72),bh);
+  }
+  sctx.fillStyle="#8f9bad";
+  for(let n=1;n<=count;n+=Math.max(1,Math.ceil(count/8))){
+    const x=pad.l+(n-.5)*bw;sctx.fillText(n,x-8*d,h-8*d)
+  }
+  sctx.fillText("倍音番号",w/2-28*d,h-8*d);
+}
+function drawWave(){
+  resizeCanvas(wave); const d=wave._d,w=wave.width,h=wave.height;
+  wctx.clearRect(0,0,w,h);wctx.fillStyle="#0c1016";wctx.fillRect(0,0,w,h);
+  wctx.strokeStyle="#293344";wctx.beginPath();wctx.moveTo(0,h/2);wctx.lineTo(w,h/2);wctx.stroke();
+  const a=currentArray(), samples=1000;
+  wctx.beginPath();
+  for(let i=0;i<samples;i++){
+    const t=i/samples; let y=0;
+    for(let n=1;n<=MAX_HARMONICS;n++){
+      const amp=a[n-1]||0, ph=(state.phases[n-1]||0)*Math.PI/180;
+      y+=amp*Math.sin(2*Math.PI*n*t+ph);
+    }
+    y/=Math.max(1,a.reduce((p,x)=>p+Math.abs(x||0),0));
+    const x=i/(samples-1)*w, yy=h/2-y*(h*.42);
+    if(i===0)wctx.moveTo(x,yy);else wctx.lineTo(x,yy);
+  }
+  wctx.strokeStyle="#7dd3fc";wctx.lineWidth=2*d;wctx.stroke();
+}
+function render(){drawSpectrum();drawWave();renderPhaseGrid()}
+function renderWave(){drawWave()}
+
+function pointerToHarmonic(e){
+  const r=spectrum.getBoundingClientRect(),count=+document.getElementById("visibleCount").value;
+  const x=(e.clientX-r.left)/r.width, y=(e.clientY-r.top)/r.height;
+  const n=Math.floor(x*count)+1;
+  if(n<1||n>MAX_HARMONICS) return;
+  const padTop=.04,padBottom=.09, usable=1-padTop-padBottom;
+  let val=(1-(y-padTop)/usable);
+  val=Math.max(0,Math.min(1.6,val));
+  if(n===1) val=1;
+  const arr=currentArray(); arr[n-1]=val;
+  if(state.currentVowel==="a") state.harmonics=arr;
+  state.vowels[state.currentVowel]=arr;
+  document.getElementById("hoverInfo").textContent=`${n}倍音：${(val*100).toFixed(0)}%`;
+  render(); updateAudio();
+}
+spectrum.addEventListener("pointerdown",e=>{dragStartSnapshot=snapshotState();dragging=true;spectrum.setPointerCapture(e.pointerId);pointerToHarmonic(e)});
+spectrum.addEventListener("pointermove",e=>{if(dragging)pointerToHarmonic(e)});
+function finishSpectrumDrag(){
+  if(!dragging)return;
+  dragging=false;
+  if(dragStartSnapshot){
+    const before=JSON.stringify(dragStartSnapshot);
+    const after=JSON.stringify(snapshotState());
+    if(before!==after)pushUndoSnapshot(dragStartSnapshot);
+  }
+  dragStartSnapshot=null;
+}
+spectrum.addEventListener("pointerup",finishSpectrumDrag);
+spectrum.addEventListener("pointercancel",finishSpectrumDrag);
+document.getElementById("undoBtn").onclick=()=>{
+  if(!undoHistory.length)return;
+  redoHistory.push(snapshotState());restoreSnapshot(undoHistory.pop());
+};
+document.getElementById("redoBtn").onclick=()=>{
+  if(!redoHistory.length)return;
+  undoHistory.push(snapshotState());restoreSnapshot(redoHistory.pop());
+};
+
+document.getElementById("resetBtn").onclick=()=>{clearHistory();state.voiceType="male";state.fundamental=130;state.currentVowel="a";state.harmonics=Array(MAX_HARMONICS).fill(0);state.harmonics[0]=1;state.vowels={a:null,i:null,u:null,e:null,o:null};state.phases.fill(0);octaveShift=0;syncControls();updateNoteButtons();updateHistoryButtons();render();updateAudio();toast("リセットしました")};
+document.getElementById("visibleCount").onchange=render;
+function setVowelTabs(v){
+  document.querySelectorAll(".vowel-tab").forEach(b=>{
+    const active=b.dataset.vowel===v;
+    b.classList.toggle("active",active);
+    b.setAttribute("aria-selected",String(active));
+  });
+}
+function setVoiceTabs(v){
+  document.querySelectorAll(".voice-tab").forEach(b=>{
+    const active=b.dataset.voice===v;
+    b.classList.toggle("active",active);
+    b.setAttribute("aria-selected",String(active));
+  });
+}
+document.querySelectorAll(".voice-tab").forEach(b=>b.onclick=()=>{
+  state.voiceType=b.dataset.voice;
+  setVoiceTabs(state.voiceType);
+});
+document.querySelectorAll("[data-template-vowel]").forEach(b=>b.onclick=()=>{
+  clearHistory();
+  const v=b.dataset.templateVowel;
+  state.currentVowel=v;
+  state.vowels[v]=spectralEnvelope(state.fundamental,state.voiceType,v);
+  state.harmonics=clone(state.vowels[v]);
+  setVowelTabs(v);
+  render();updateAudio();
+  toast(`「${b.textContent}」のテンプレートを生成しました`);
+});
+let octaveShift=0;
+function updateNoteButtons(){
+  document.querySelectorAll("[data-note]").forEach(b=>{
+    const base=Number(b.dataset.baseNote||b.dataset.note);
+    b.dataset.baseNote=String(base);
+    b.dataset.note=String(base*Math.pow(2,octaveShift));
+    const name=b.dataset.noteName;
+    const octave=Number(b.dataset.baseOctave||4)+octaveShift;
+    b.textContent=`${name}${octave}`;
+  });
+}
+document.getElementById("octaveDown").onclick=()=>{if(octaveShift>-3){octaveShift--;updateNoteButtons()}};
+document.getElementById("octaveUp").onclick=()=>{if(octaveShift<3){octaveShift++;updateNoteButtons()}};
+function selectVowel(v){
+  state.currentVowel=v;
+  setVowelTabs(v);
+  if(!state.vowels[v]) generateVowel(v);
+  else {state.harmonics=clone(state.vowels[v]);render();updateAudio()}
+}
+document.querySelectorAll(".vowel-tab").forEach(b=>b.onclick=()=>selectVowel(b.dataset.vowel));
+document.querySelectorAll("[data-note]").forEach(b=>b.onclick=async()=>{await ensureAudio();setFrequency(+b.dataset.note);});
+document.getElementById("aPreview").onclick=async()=>{await ensureAudio();setFrequency(state.fundamental);gain.gain.setTargetAtTime(.12,audioCtx.currentTime,.01)};
+document.getElementById("stopPreview").onclick=()=>{if(audioCtx)gain.gain.setTargetAtTime(0,audioCtx.currentTime,.015)};
+
+document.getElementById("phaseToggle").onclick=()=>{
+  const a=document.getElementById("phaseArea"), hidden=a.hidden;
+  a.hidden=!hidden;document.getElementById("phaseToggle").textContent=hidden?"非表示":"表示";
+};
+function renderPhaseGrid(){
+  const grid=document.getElementById("phaseGrid");grid.innerHTML="";
+  const count=Math.min(MAX_HARMONICS,+document.getElementById("visibleCount").value);
+  for(let n=1;n<=count;n++){
+    const d=document.createElement("div");d.className="phaseItem";
+    d.innerHTML=`<label>${n}倍音</label><input type="number" min="-180" max="180" step="1" value="${state.phases[n-1]}">`;
+    d.querySelector("input").oninput=e=>{state.phases[n-1]=+e.target.value||0;renderWave();updateAudio()};
+    grid.appendChild(d);
+  }
+}
+document.getElementById("phaseZero").onclick=()=>{state.phases.fill(0);render();updateAudio()};
+document.getElementById("phaseRandom").onclick=()=>{for(let i=0;i<MAX_HARMONICS;i++)state.phases[i]=Math.round(Math.random()*360-180);render();updateAudio()};
+
+function syncControls(){
+ setVoiceTabs(state.voiceType);
+ setVowelTabs(state.currentVowel);
+}
+document.getElementById("saveBtn").onclick=()=>{
+ const data={...state,harmonics:Array.from(state.harmonics),phases:Array.from(state.phases),vowels:Object.fromEntries(Object.entries(state.vowels).map(([k,v])=>[k,v?Array.from(v):null]))};
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=(state.name||"my-voice")+".voice";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+document.getElementById("loadBtn").onclick=()=>document.getElementById("fileInput").click();
+document.getElementById("fileInput").onchange=async e=>{
+ const f=e.target.files[0];if(!f)return;
+ try{
+  const x=JSON.parse(await f.text());
+  if(!x.harmonics||!x.phases)throw new Error("invalid");
+  clearHistory();
+  state.voiceType=x.voiceType||"male";state.fundamental=x.fundamental||130;state.currentVowel=x.currentVowel||"a";
+  state.harmonics=Array.from({length:MAX_HARMONICS},(_,i)=>+(x.harmonics[i]??(i===0?1:0)));
+  state.phases=Array.from({length:MAX_HARMONICS},(_,i)=>+(x.phases[i]??0));
+  state.vowels={a:null,i:null,u:null,e:null,o:null,...(x.vowels||{})};
+  syncControls();setVowelTabs(state.currentVowel);render();updateAudio();toast("VOICEを読み込みました");
+ }catch(err){alert("VOICEファイルを読み込めませんでした。")}
+ e.target.value="";
+};
+
+window.addEventListener("resize",render);
+syncControls();updateNoteButtons();updateHistoryButtons();render();
+</script>
+</body>
+</html>
