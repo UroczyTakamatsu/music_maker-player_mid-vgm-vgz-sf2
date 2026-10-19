@@ -331,6 +331,14 @@
   </div>
 </div>
 
+<!-- Embedded Voice Synth editor -->
+<div class="overlay hidden" id="voiceSynthEditorOverlay" style="z-index:80;padding:8px;">
+  <div class="dialog" style="display:flex;flex-direction:column;max-width:1000px;width:100%;height:94vh;max-height:94vh;overflow:hidden;">
+    <h3 style="display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;">Voice Synth <button id="voiceSynthEditorClose" style="color:var(--text);font-size:22px;padding:0 8px;">×</button></h3>
+    <iframe id="voiceSynthFrame" title="Voice Synth 音色エディター" style="border:0;width:100%;flex:1;min-height:0;background:#10131a;"></iframe>
+  </div>
+</div>
+
 <!-- ================= Dialogs ================= -->
 
 <div class="overlay hidden" id="menuOverlay">
@@ -340,6 +348,7 @@
       <div class="menurow" id="menuProject">📁 プロジェクト</div>
       <div class="menurow" id="menuMixer">🎚 ミキサー</div>
       <div class="menurow" id="menuSettings">🔧 設定</div>
+      <div class="menurow" id="menuVoiceMode">🎙 Voice Synth編集モード</div>
       <div class="menurow" id="menuAbout">ℹ️ このアプリについて</div>
     </div>
     <div class="foot"><button data-close="menuOverlay">閉じる</button></div>
@@ -498,22 +507,32 @@
 
 <div class="overlay hidden" id="fmEnvelopeOverlay">
   <div class="dialog" style="max-width:320px;">
-    <h3>エンベロープ(ADSR)</h3>
+    <h3 id="adsrDialogTitle">エンベロープ(ADSR)</h3>
     <div class="field">
-      <label>アタック(秒)</label>
+      <div style="margin:4px 0 12px;padding:10px;background:var(--bg-2,#111827);border:1px solid var(--line,#334155);border-radius:10px;">
+        <svg id="fmEnvelopeGraph" viewBox="0 0 320 140" role="img" aria-label="ADSRエンベロープグラフ" style="display:block;width:100%;height:auto;overflow:visible">
+          <path d="M18 12 V118 H308" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width="1.5"/>
+          <path id="fmEnvelopeFill" d="" fill="#8fbd54" fill-opacity=".22"/>
+          <path id="fmEnvelopeLine" d="" fill="none" stroke="#8fbd54" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+          <text x="20" y="132" font-size="9" fill="currentColor" opacity=".7">ノートオン</text>
+          <text x="220" y="132" font-size="9" fill="currentColor" opacity=".7">ノートオフ →</text>
+        </svg>
+        <div style="font-size:11px;opacity:.7;text-align:center">グラフはスライダーに合わせてリアルタイムに変化します</div>
+      </div>
+      <label>アタック（秒）</label>
       <div class="numval" id="fmAttackVal">0.01</div>
       <input type="range" id="fmAttackSlider" min="0" max="2" step="0.01" value="0.01">
-      <label>ディケイ(秒)</label>
+      <label>ディケイ（秒）</label>
       <div class="numval" id="fmDecayVal">0.1</div>
       <input type="range" id="fmDecaySlider" min="0" max="2" step="0.01" value="0.1">
-      <label>サステイン(0〜1)</label>
+      <label>サステイン（最大音量に対する割合）</label>
       <div class="numval" id="fmSustainVal">0.7</div>
       <input type="range" id="fmSustainSlider" min="0" max="1" step="0.01" value="0.7">
-      <label>リリース(秒)</label>
+      <label>リリース（秒）</label>
       <div class="numval" id="fmReleaseVal">0.3</div>
       <input type="range" id="fmReleaseSlider" min="0" max="3" step="0.01" value="0.3">
     </div>
-    <div class="foot"><button data-close="fmEnvelopeOverlay">閉じる</button></div>
+    <div class="foot"><button id="adsrResetBtn">リセット</button><button data-close="fmEnvelopeOverlay">閉じる</button></div>
   </div>
 </div>
 
@@ -592,6 +611,7 @@
 <div class="overlay hidden" id="instOverlay">
   <div class="dialog">
     <h3>音色選択</h3>
+    <div style="padding:0 16px 10px;"><button id="trackSettingsCopyOpen" class="iconbtn wide" style="width:100%;">トラック設定コピー・メモリ</button></div>
     <div style="display:flex;gap:8px;padding:0 16px 10px;">
       <button class="iconbtn wide" id="instTabPreset" style="flex:1;">プリセット</button>
       <button class="iconbtn wide" id="instTabSynth" style="flex:1;">シンセ</button>
@@ -620,6 +640,37 @@
         <button id="instOk">OK</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="trackSettingsCopyOverlay">
+  <div class="dialog" style="max-width:440px;max-height:88vh;overflow-y:auto;">
+    <h3>トラック設定コピー・メモリ</h3>
+    <div class="field">
+      <div style="font-weight:600;margin-bottom:6px;">コピーする項目</div>
+      <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="tsCopyInstrument" checked> 音色設定（楽器・Synth設定・SF2・FMメモリ割当など）</label>
+      <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="tsCopyAdsr" checked> ADSR</label>
+      <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="tsCopyMix" checked> 音量・パン</label>
+      <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="tsCopyAutomation"> 音量・パンのオートメーション</label>
+    </div>
+    <div class="field" style="border-top:1px solid var(--line);padding-top:12px;">
+      <div style="font-weight:600;margin-bottom:6px;">① コピー先トラックでコピー元を指定</div>
+      <label>コピー元</label><select id="tsCopySource" style="width:100%;padding:9px;background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:8px;"></select>
+      <button id="tsCopyToCurrent" class="iconbtn wide" style="width:100%;margin-top:8px;">選択項目をこのトラックにコピー</button>
+    </div>
+    <div class="field" style="border-top:1px solid var(--line);padding-top:12px;">
+      <div style="font-weight:600;margin-bottom:6px;">② コピー元トラックから複数のコピー先を選択</div>
+      <div id="tsCopyTargets" style="max-height:190px;overflow-y:auto;"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;"><button id="tsCopySelectAll" class="iconbtn" style="flex:1;">全選択</button><button id="tsCopySelectNone" class="iconbtn" style="flex:1;">全解除</button></div>
+      <button id="tsCopyToTargets" class="iconbtn wide" style="width:100%;margin-top:8px;">選択トラックに適用</button>
+    </div>
+    <div class="field" style="border-top:1px solid var(--line);padding-top:12px;">
+      <div style="font-weight:600;margin-bottom:6px;">③ 設定メモリ（FM Synthの波形メモリとは別）</div>
+      <label>メモリスロット</label><select id="tsMemorySlot" style="width:100%;padding:9px;background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:8px;"></select>
+      <div style="display:flex;gap:8px;margin-top:8px;"><button id="tsMemorySave" class="iconbtn" style="flex:1;">現在の設定を保存</button><button id="tsMemoryLoad" class="iconbtn" style="flex:1;">呼び出して適用</button></div>
+      <div id="tsMemoryStatus" style="font-size:12px;color:var(--text-dim);margin-top:6px;"></div>
+    </div>
+    <div class="foot"><button data-close="trackSettingsCopyOverlay">閉じる</button></div>
   </div>
 </div>
 
@@ -833,6 +884,7 @@ function newSong(){
     currentFlagIndex: -1, // index into flags[], -1 = none
     customWaveforms: Array.from({length:4}, ()=>defaultRetroWaveform()), // Retro Synth custom waveform memory (project-wide, 4 slots)
     fmMemory: Array.from({length:16}, ()=>defaultFmPreset()), // FM Synth preset memory (project-wide, 16 slots)
+    trackSettingMemory: Array.from({length:16}, ()=>null), // General track settings memory, independent from FM memory
     limits: { maxFmTracks: null, maxPolyphonyPerTrack: null }, // null = unlimited
   };
 }
@@ -1968,7 +2020,7 @@ function floorTick(t){ const gt=gridTicks(); return Math.floor(t/gt)*gt; }
 gridCanvas.addEventListener('pointerdown', onGridDown);
 gridCanvas.addEventListener('pointermove', onGridMove);
 window.addEventListener('pointerup', e=>{
-  if(pointerDownInfo) onGridUp(e);
+  if(pointerDownInfo && pointerDownInfo.pointerId===e.pointerId) onGridUp(e);
   if(voicePendingTap && voicePendingTap.pointerId===e.pointerId){
     const pending=voicePendingTap; voicePendingTap=null;
     if(!pending.moved && pending.note){
@@ -1995,7 +2047,7 @@ window.addEventListener('pointerup', e=>{
   }
 });
 window.addEventListener('pointercancel', e=>{
-  if(pointerDownInfo) onGridUp(e);
+  if(pointerDownInfo && pointerDownInfo.pointerId===e.pointerId) onGridUp(e);
   if(voicePendingTap && voicePendingTap.pointerId===e.pointerId) voicePendingTap=null;
 });
 
@@ -2038,7 +2090,33 @@ function pushUndoIfChanged(before){
     invalidateVoiceStealCache(song.activeTrack);
   }
 }
+// Pitch-curve history is separate from note editing history, but reuses the same visible
+// Undo/Redo buttons while pitch-curve editing is active.
+let pitchUndoStack=[], pitchRedoStack=[];
+function snapshotPitchCurves(){ return JSON.stringify(song.tracks.map(t=>t.notes.map(n=>n.pitchCurve===undefined?null:n.pitchCurve))); }
+function restorePitchCurves(snap){
+  const arr=JSON.parse(snap);
+  song.tracks.forEach((t,ti)=>t.notes.forEach((n,ni)=>{
+    const curve=arr[ti]&&arr[ti][ni];
+    if(curve===null || curve===undefined) delete n.pitchCurve; else n.pitchCurve=curve;
+  }));
+}
+function pushPitchUndoIfChanged(before){
+  const after=snapshotPitchCurves();
+  if(after!==before){ pitchUndoStack.push(before); if(pitchUndoStack.length>60)pitchUndoStack.shift(); pitchRedoStack=[]; }
+}
+function undoPitchCurve(){
+  if(!pitchUndoStack.length)return;
+  pitchRedoStack.push(snapshotPitchCurves()); restorePitchCurves(pitchUndoStack.pop());
+  drawPitchOverlay(); drawGrid(); reschedulePlaybackNow();
+}
+function redoPitchCurve(){
+  if(!pitchRedoStack.length)return;
+  pitchUndoStack.push(snapshotPitchCurves()); restorePitchCurves(pitchRedoStack.pop());
+  drawPitchOverlay(); drawGrid(); reschedulePlaybackNow();
+}
 document.getElementById('undoBtn').onclick=()=>{
+  if(pitchEditMode){undoPitchCurve();return;}
   if(!undoStack.length) return;
   redoStack.push(snapshotNotes());
   restoreNotes(undoStack.pop());
@@ -2046,6 +2124,7 @@ document.getElementById('undoBtn').onclick=()=>{
   drawGrid();
 };
 document.getElementById('redoBtn').onclick=()=>{
+  if(pitchEditMode){redoPitchCurve();return;}
   if(!redoStack.length) return;
   undoStack.push(snapshotNotes());
   restoreNotes(redoStack.pop());
@@ -2085,7 +2164,7 @@ function onGridDown(e){
 
   gestureUndoBefore = snapshotNotes();
   lastPointerPos = p;
-  pointerDownInfo = {p, tick, pitch, hitNote, moved:false, t0:performance.now()};
+  pointerDownInfo = {p, tick, pitch, hitNote, moved:false, t0:performance.now(), pointerId:e.pointerId};
 
   if(!hitNote && mode==='input'){
     const startTick = floorTick(tick);
@@ -2290,18 +2369,24 @@ function finishGridGesture(e){
   stopLivePreview();
   stopAllPreviewVoices();
   pushUndoIfChanged(gestureUndoBefore);
+  // Clear the placement guide visually as well as in state. A tap or a completed
+  // long-press can leave the previously drawn guide on the canvas unless it is
+  // repainted after notePlaceGuide is cleared.
   notePlaceGuide=null;
   dragNote=null;
   pointerDownInfo=null;
+  drawGrid();
 }
 
 function onGridUp(e){
+  if(pointerDownInfo && e && e.pointerId!==undefined && pointerDownInfo.pointerId!==e.pointerId) return;
   finishGridGesture(e);
 }
 
 gridCanvas.addEventListener('pointerup', onGridUp);
 gridCanvas.addEventListener('pointercancel', onGridUp);
-gridCanvas.addEventListener('lostpointercapture', onGridUp);
+// Ignore lostpointercapture here: a second pointer pressing a navigation control must not
+// cancel the first pointer's in-progress long-press. Matching pointerup/pointercancel ends it.
 
 /* ---- edge autoscroll while a rubber-band selection is being dragged (that gesture eats all
    other input, so the shadow scrollbars can't be used at the same time) ---- */
@@ -2474,6 +2559,7 @@ bindPanArea(document.getElementById('vScrollTrack'), {horizontal:true, vertical:
    ============================================================ */
 let pitchEditMode=false;
 let pitchStroke=null; // raw {x,y} points being captured
+let pitchGestureUndoBefore=null;
 const pitchCanvas = document.getElementById('pitchCanvas');
 const pitchOverlayEl = document.getElementById('pitchOverlay');
 
@@ -2496,10 +2582,10 @@ function updatePitchOverlayInteractivity(){
 }
 document.getElementById('pitchClearBtn').onclick=()=>{
   const tr = song.tracks[song.activeTrack];
-  const before = snapshotNotes();
+  const before = snapshotPitchCurves();
   tr.notes.forEach(nt=>{ if(selection.has(nt.id)) delete nt.pitchCurve; });
-  pushUndoIfChanged(before);
-  drawPitchOverlay(); drawGrid();
+  pushPitchUndoIfChanged(before);
+  drawPitchOverlay(); drawGrid(); reschedulePlaybackNow();
 };
 document.getElementById('vibratoBtn').onclick=()=>{
   if(!selection.size){ showToast('先にノーツを選択してください'); return; }
@@ -2670,7 +2756,7 @@ function pitchOverlayLocalPos(e){
 pitchCanvas.addEventListener('pointerdown', e=>{
   if(!pitchEditMode) return;
   pitchCanvas.setPointerCapture(e.pointerId);
-  gestureUndoBefore = snapshotNotes();
+  pitchGestureUndoBefore = snapshotPitchCurves();
   pitchStroke = [pitchOverlayLocalPos(e)];
 });
 pitchCanvas.addEventListener('pointermove', e=>{
@@ -2683,8 +2769,9 @@ function finishPitchStroke(){
   if(!pitchStroke) return;
   if(pitchStroke.length>=2) commitPitchStroke(pitchStroke);
   pitchStroke=null;
-  pushUndoIfChanged(gestureUndoBefore);
-  drawPitchOverlay();
+  pushPitchUndoIfChanged(pitchGestureUndoBefore);
+  pitchGestureUndoBefore=null;
+  drawPitchOverlay(); reschedulePlaybackNow();
 }
 pitchCanvas.addEventListener('pointerup', finishPitchStroke);
 pitchCanvas.addEventListener('pointercancel', finishPitchStroke);
@@ -2721,24 +2808,52 @@ function mergePitchCurve(existing, newSegment, tNewStart, tNewEnd){
 }
 function commitPitchStroke(rawPoints){
   const simplified = rdpSimplify(rawPoints, 4);
-  const curvePts = simplified.map(p=>({tick: xToTick(p.x), pitchAbs: yToNoteFloat(p.y)}));
+  const curvePts = simplified.map(p=>({tick:xToTick(p.x),pitchAbs:yToNoteFloat(p.y)}));
   curvePts.sort((a,b)=>a.tick-b.tick);
-  const minTick = curvePts[0].tick, maxTick = curvePts[curvePts.length-1].tick;
+  const minTick=curvePts[0].tick, maxTick=curvePts[curvePts.length-1].tick;
+  if(maxTick<=minTick) return;
+  const tr=song.tracks[song.activeTrack];
+  const overlapping=tr.notes.filter(nt=>nt.startTick<maxTick && nt.startTick+nt.lengthTick>minTick);
+  if(!overlapping.length)return;
 
-  const tr = song.tracks[song.activeTrack];
-  tr.notes.forEach(nt=>{
-    const noteStart=nt.startTick, noteEnd=nt.startTick+nt.lengthTick;
-    if(noteEnd<=minTick || noteStart>=maxTick) return; // stroke doesn't overlap this note
-    const clampedStart = Math.max(noteStart, minTick);
-    const clampedEnd = Math.min(noteEnd, maxTick);
-    const tNewStart = (clampedStart-noteStart)/nt.lengthTick;
-    const tNewEnd = (clampedEnd-noteStart)/nt.lengthTick;
-    const interior = curvePts.filter(pt=>pt.tick>clampedStart && pt.tick<clampedEnd)
-      .map(pt=>({t:(pt.tick-noteStart)/nt.lengthTick, semi: pt.pitchAbs-nt.pitch}));
-    const startSemi = interpPitchAt(curvePts, clampedStart)-nt.pitch;
-    const endSemi = interpPitchAt(curvePts, clampedEnd)-nt.pitch;
-    const newSegment = [{t:tNewStart, semi:startSemi}, ...interior, {t:tNewEnd, semi:endSemi}];
-    nt.pitchCurve = mergePitchCurve(nt.pitchCurve, newSegment, tNewStart, tNewEnd);
+  // Split the stroke wherever a note begins/ends. In each time slice, apply it only to the
+  // note whose base pitch is closest to the drawn line. This preserves strokes over sequential
+  // notes while preventing the same stroke from bending every note in a chord.
+  const boundaries=[minTick,maxTick];
+  overlapping.forEach(nt=>{
+    const a=Math.max(minTick,nt.startTick), b=Math.min(maxTick,nt.startTick+nt.lengthTick);
+    if(a>minTick&&a<maxTick)boundaries.push(a);
+    if(b>minTick&&b<maxTick)boundaries.push(b);
+  });
+  curvePts.forEach(pt=>{if(pt.tick>minTick&&pt.tick<maxTick)boundaries.push(pt.tick);});
+  const ticks=[...new Set(boundaries)].sort((a,b)=>a-b);
+  const assigned=new Map();
+  for(let i=0;i<ticks.length-1;i++){
+    const a=ticks[i], b=ticks[i+1]; if(b<=a)continue;
+    const mid=(a+b)/2;
+    const candidates=overlapping.filter(nt=>nt.startTick< b && nt.startTick+nt.lengthTick> a && mid>=nt.startTick && mid<nt.startTick+nt.lengthTick);
+    if(!candidates.length)continue;
+    const linePitch=interpPitchAt(curvePts,mid);
+    candidates.sort((n1,n2)=>Math.abs(linePitch-n1.pitch)-Math.abs(linePitch-n2.pitch));
+    const target=candidates[0];
+    if(!assigned.has(target))assigned.set(target,[]);
+    const spans=assigned.get(target), last=spans[spans.length-1];
+    if(last && Math.abs(last.end-a)<1e-6)last.end=b; else spans.push({start:a,end:b});
+  }
+  assigned.forEach((spans,nt)=>{
+    spans.forEach(span=>{
+      const a=Math.max(nt.startTick,span.start), b=Math.min(nt.startTick+nt.lengthTick,span.end);
+      if(b<=a)return;
+      const tNewStart=(a-nt.startTick)/nt.lengthTick, tNewEnd=(b-nt.startTick)/nt.lengthTick;
+      const interior=curvePts.filter(pt=>pt.tick>a&&pt.tick<b)
+        .map(pt=>({t:(pt.tick-nt.startTick)/nt.lengthTick,semi:pt.pitchAbs-nt.pitch}));
+      const newSegment=[
+        {t:tNewStart,semi:interpPitchAt(curvePts,a)-nt.pitch},
+        ...interior,
+        {t:tNewEnd,semi:interpPitchAt(curvePts,b)-nt.pitch}
+      ];
+      nt.pitchCurve=mergePitchCurve(nt.pitchCurve,newSegment,tNewStart,tNewEnd);
+    });
   });
 }
 
@@ -2984,7 +3099,7 @@ document.getElementById('copyBtn').onclick=()=>{
   const sel = tr.notes.filter(n=>selection.has(n.id));
   if(!sel.length) return;
   const minTick = Math.min(...sel.map(n=>n.startTick));
-  clipboard = sel.map(n=>({pitch:n.pitch, offset:n.startTick-minTick, lengthTick:n.lengthTick}));
+  clipboard = sel.map(n=>({pitch:n.pitch, offset:n.startTick-minTick, lengthTick:n.lengthTick, voiceChar:n.voiceChar}));
 };
 document.getElementById('pasteBtn').onclick=()=>{
   if(!clipboard.length) return;
@@ -2992,7 +3107,7 @@ document.getElementById('pasteBtn').onclick=()=>{
   const tr = song.tracks[song.activeTrack];
   selection.clear();
   clipboard.forEach(c=>{
-    const nt = {id:noteIdSeq++, pitch:c.pitch, startTick:currentFlagTick()+c.offset, lengthTick:c.lengthTick};
+    const nt = {id:noteIdSeq++, pitch:c.pitch, startTick:currentFlagTick()+c.offset, lengthTick:c.lengthTick, ...(c.voiceChar ? {voiceChar:c.voiceChar} : {})};
     tr.notes.push(nt);
     selection.add(nt.id);
   });
@@ -3184,6 +3299,8 @@ function loadSongObject(newSongObj){
   if(!song.tempoChanges || !song.tempoChanges.length) song.tempoChanges=[{tick:0,bpm:song.tempo}];
   if(!song.limits) song.limits = { maxFmTracks: null, maxPolyphonyPerTrack: null };
   if(!song.fmMemory) song.fmMemory = Array.from({length:16}, ()=>defaultFmPreset());
+  if(!Array.isArray(song.trackSettingMemory)) song.trackSettingMemory = Array.from({length:16}, ()=>null);
+  while(song.trackSettingMemory.length<16) song.trackSettingMemory.push(null);
   song.tracks.forEach(tr=>{ if(!tr.timbreEvents) tr.timbreEvents=[]; if(!tr.fmMemorySlot) tr.fmMemorySlot=1; if(tr.sf2Key===undefined) tr.sf2Key=null; if(tr.sf2Name===undefined) tr.sf2Name=null; if(tr.sf2Bank===undefined) tr.sf2Bank=0; if(tr.sf2Program===undefined) tr.sf2Program=(tr.instrument>=0?tr.instrument:0); });
   resetMeasureCache(); invalidateTempoCache(); invalidateVoiceStealCache(); selection.clear(); clipboard=[]; undoStack=[]; redoStack=[];
   syncTrackNodesFromSong();
@@ -3571,7 +3688,7 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
     const pan=(tr.pan||0)/100, a=(pan+1)*Math.PI/4;
     const panPoints=sortedPanPoints(tr).map(pt=>({tick:pt.tick,pan:Math.max(-100,Math.min(100,pt.pan||0))}));
     const volumePoints=sortedVolumePoints(tr).map(pt=>({tick:pt.tick,volume:Math.max(0,Math.min(127,pt.volume??100))}));
-    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',gain:audible?tr.volume/127:0,volume:tr.volume??100,volumePoints,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),panPoints,wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0};
+    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',gain:audible?tr.volume/127:0,volume:tr.volume??100,volumePoints,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),panPoints,wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0,adsr:tr.instrumentType!=='fm'&&tr.instrument!==-1&&tr.adsr?{...tr.adsr}:null};
     tr.notes.forEach(nt=>{
       const endTick=effectiveNoteEndTick(ti,nt);
       const when=leadSeconds+tickToSeconds(nt.startTick);
@@ -4099,16 +4216,19 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
             }
 
             let e=0;
-            if(age<noteOff){
+            if(tr.adsr){
+              const ae=tr.adsr, aa=Math.max(.001,ae.attack), ad=Math.max(.001,ae.decay), as=Math.max(0,Math.min(1,ae.sustain)), ar=Math.max(.01,ae.release), relAt=Math.max(aa+ad,dur);
+              if(age<aa) e=peak*age/aa;
+              else if(age<aa+ad) e=peak+(peak*as-peak)*((age-aa)/ad);
+              else if(age<relAt) e=peak*as;
+              else if(age<relAt+ar) e=peak*as*Math.pow(.0001/Math.max(.0001,peak*as),(age-relAt)/ar);
+            }else if(age<noteOff){
               e=gainBeforeRelease(age);
             }else if(age<noteOff+REL){
               if(releaseStartGain<=.0001) e=.0001;
-              else e=releaseStartGain*Math.pow(.0001/releaseStartGain,
-                    (age-noteOff)/REL);
-            }else{
-              e=0;
+              else e=releaseStartGain*Math.pow(.0001/releaseStartGain,(age-noteOff)/REL);
             }
-            if(age<delay) e=0;
+            if(!tr.adsr && age<delay) e=0;
             { const pg=panGainsAtFrame(tr,fr); addSample(fr,smp*e,pg[0],pg[1]); }
           }
         } else {
@@ -4198,11 +4318,15 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         }
       }else if(kind===5){
         let phase=0;
-        for(let fr=start;fr<end;fr++){
+        const ae=tr.adsr, aa=ae?Math.max(.001,ae.attack):.008, ad=ae?Math.max(.001,ae.decay):.01, as=ae?Math.max(0,Math.min(1,ae.sustain)):.7, ar=ae?Math.max(.01,ae.release):.15, peak=(vel/127)*.25, relAt=Math.max(aa+ad,dur);
+        for(let fr=start;fr<Math.min(totalFrames,end+(ae?Math.ceil(ar*sr):Math.ceil(.15*sr)));fr++){
           const age=(fr-start)/sr, pm=pitchMulAt(n,age);
           phase=(phase+2*Math.PI*pitch*pm/sr)%(2*Math.PI);
           const smp=waveSample(tr.wave,phase);
-          const x=smp*envAt(kind,age,dur,vel,null)*(vel/127);
+          let env;
+          if(ae){ if(age<aa) env=peak*age/aa; else if(age<aa+ad) env=peak+(peak*as-peak)*((age-aa)/ad); else if(age<relAt) env=peak*as; else if(age<relAt+ar) env=peak*as*Math.pow(.0001/Math.max(.0001,peak*as),(age-relAt)/ar); else env=0; }
+          else env=envAt(kind,age,dur,vel,null)*(vel/127);
+          const x=smp*env;
           { const pg=panGainsAtFrame(tr,fr); addSample(fr,x,pg[0],pg[1]); }
         }
       }else if(kind===4){
@@ -4371,7 +4495,7 @@ function openTrackDialog(){
   song.tracks.forEach((tr,i)=>{
     const row = document.createElement('div');
     row.className='listrow'+(i===song.activeTrack?' selected':'');
-    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : (String(tr.instrument).padStart(3,'0')+':'+GM_INSTRUMENTS[tr.instrument]));
+    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='voice' ? 'Voice Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : (String(tr.instrument).padStart(3,'0')+':'+GM_INSTRUMENTS[tr.instrument]));
     const checked = otherTracksVisible.has(i) ? 'checked' : '';
     row.innerHTML = `<div style="display:flex;align-items:center;"><input type="checkbox" class="visChk" ${checked} style="margin-right:10px;width:18px;height:18px;"><span class="dot"></span>${tr.name}</div><span class="sub">${instName}</span>`;
     row.querySelector('.visChk').addEventListener('click', e=>{
@@ -4401,7 +4525,7 @@ document.getElementById('instBtn').onclick=()=>openInstDialog(song.activeTrack);
 function openInstDialog(trackIdx){
   instPendingTrack = trackIdx;
   const tr = song.tracks[trackIdx];
-  switchInstTab(tr.instrumentType==='synth' ? 'synth' : (tr.instrumentType==='sf2' ? 'sf2' : 'preset'));
+  switchInstTab((tr.instrumentType==='synth'||tr.instrumentType==='fm'||tr.instrumentType==='voice') ? 'synth' : (tr.instrumentType==='sf2' ? 'sf2' : 'preset'));
   const keys = document.getElementById('previewKeys');
   keys.innerHTML='';
   for(let o=1;o<=7;o++){
@@ -4430,6 +4554,113 @@ function switchInstTab(tab){
 document.getElementById('instTabPreset').onclick=()=>switchInstTab('preset');
 document.getElementById('instTabSynth').onclick=()=>switchInstTab('synth');
 document.getElementById('instTabSf2').onclick=()=>switchInstTab('sf2');
+
+/* ---- General track settings copy + memory (separate from FM waveform memory) ---- */
+const TRACK_SETTING_FIELDS = ['instrument','instrumentType','synthMode','synthPresetIdx','synthCustomSlot','sf2Key','sf2Name','sf2Bank','sf2Program','fmMemorySlot','timbreEvents','voiceSynthData','voiceName'];
+function tsClone(v){ return v==null ? v : JSON.parse(JSON.stringify(v)); }
+function tsTrackLabel(i){
+  const tr=song.tracks[i];
+  const name=tr.instrumentType==='fm'?'FM Synth':tr.instrumentType==='synth'?'Retro Synth':tr.instrumentType==='voice'?'Voice Synth':tr.instrumentType==='sf2'?('SF2 '+(tr.sf2Name||'')):(tr.instrument===-1?'ドラム':GM_INSTRUMENTS[tr.instrument]||'プリセット');
+  return `${i+1}: ${tr.name||('Track '+(i+1))} — ${name}`;
+}
+function tsSelectedOptions(){
+  return {instrument:document.getElementById('tsCopyInstrument').checked,adsr:document.getElementById('tsCopyAdsr').checked,mix:document.getElementById('tsCopyMix').checked,automation:document.getElementById('tsCopyAutomation').checked};
+}
+function tsCaptureTrack(i){
+  const tr=song.tracks[i], out={};
+  TRACK_SETTING_FIELDS.forEach(k=>{if(tr[k]!==undefined)out[k]=tsClone(tr[k]);});
+  out.volume=tr.volume??100; out.pan=tr.pan??0; out.adsr=tsClone(tr.adsr);
+  out.panPoints=tsClone(tr.panPoints||[]); out.volumePoints=tsClone(tr.volumePoints||[]);
+  // Keep a standalone snapshot of an FM voice's patch, so general memory is not merely an FM slot pointer.
+  if(tr.instrumentType==='fm') out.fmPreset=tsClone(getFmPresetForTrack(tr,0));
+  return out;
+}
+function tsApplySettings(source, targetIdx, opts){
+  const target=song.tracks[targetIdx]; if(!target||!source)return;
+  const destinationFmSlot=Math.max(1,Math.min(16,target.fmMemorySlot||1));
+  if(opts.instrument){
+    TRACK_SETTING_FIELDS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(source,k)) target[k]=tsClone(source[k]); else if(['timbreEvents','voiceSynthData','voiceName'].includes(k)) delete target[k]; });
+    if(source.instrumentType==='fm' && source.fmPreset){
+      // Copy FM patch into the destination's assigned slot rather than changing the source slot.
+      if(!song.fmMemory) song.fmMemory=Array.from({length:16},()=>defaultFmPreset());
+      const slot=destinationFmSlot;
+      song.fmMemory[slot-1]=tsClone(source.fmPreset);
+      target.fmMemorySlot=slot;
+      if(target.timbreEvents && target.timbreEvents.length) target.timbreEvents=[];
+    }
+    delete periodicWaveCache[targetIdx];
+  }
+  if(opts.adsr){
+    if(source.instrumentType==='fm' && source.fmPreset && source.fmPreset.envelope){
+      if(target.instrumentType==='fm'){
+        const slot=Math.max(1,Math.min(16,target.fmMemorySlot||1));
+        if(!song.fmMemory[slot-1]) song.fmMemory[slot-1]=defaultFmPreset();
+        song.fmMemory[slot-1].envelope=tsClone(source.fmPreset.envelope);
+      } else target.adsr=tsClone(source.fmPreset.envelope);
+    } else if(target.instrumentType==='fm'){
+      const slot=Math.max(1,Math.min(16,target.fmMemorySlot||1));
+      if(!song.fmMemory[slot-1]) song.fmMemory[slot-1]=defaultFmPreset();
+      song.fmMemory[slot-1].envelope=tsClone(source.adsr||defaultFmEnvelope());
+    } else if(source.adsr) target.adsr=tsClone(source.adsr);
+    else delete target.adsr;
+  }
+  if(opts.mix){target.volume=source.volume??100;target.pan=source.pan??0;}
+  if(opts.automation){target.panPoints=tsClone(source.panPoints||[]);target.volumePoints=tsClone(source.volumePoints||[]);}
+}
+function tsRefreshMemoryStatus(){
+  const idx=+(document.getElementById('tsMemorySlot').value||1)-1;
+  const item=(song.trackSettingMemory||[])[idx];
+  document.getElementById('tsMemoryStatus').textContent=item?`保存済み：${item.name||('設定 '+(idx+1))}`:'未保存のスロット';
+}
+function openTrackSettingsCopyDialog(){
+  if(!Array.isArray(song.trackSettingMemory)) song.trackSettingMemory=Array.from({length:16},()=>null);
+  const sourceSel=document.getElementById('tsCopySource'); sourceSel.innerHTML='';
+  song.tracks.forEach((tr,i)=>{const o=document.createElement('option');o.value=i;o.textContent=tsTrackLabel(i);sourceSel.appendChild(o);});
+  sourceSel.value=String(instPendingTrack??song.activeTrack);
+  const targets=document.getElementById('tsCopyTargets'); targets.innerHTML='';
+  song.tracks.forEach((tr,i)=>{
+    const lab=document.createElement('label');lab.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 2px;';
+    const cb=document.createElement('input');cb.type='checkbox';cb.className='tsTargetCheck';cb.value=i;cb.checked=i!==instPendingTrack;
+    const span=document.createElement('span');span.textContent=tsTrackLabel(i);lab.append(cb,span);targets.appendChild(lab);
+  });
+  const mem=document.getElementById('tsMemorySlot');mem.innerHTML='';
+  for(let i=1;i<=16;i++){const o=document.createElement('option');o.value=i;o.textContent=`設定メモリ ${i}${song.trackSettingMemory[i-1]?'（保存済み）':''}`;mem.appendChild(o);}
+  mem.value='1';tsRefreshMemoryStatus();
+  openOverlay('trackSettingsCopyOverlay');
+}
+document.getElementById('trackSettingsCopyOpen').onclick=openTrackSettingsCopyDialog;
+document.getElementById('tsMemorySlot').onchange=tsRefreshMemoryStatus;
+document.getElementById('tsCopySelectAll').onclick=()=>document.querySelectorAll('.tsTargetCheck').forEach(cb=>{cb.checked=true;});
+document.getElementById('tsCopySelectNone').onclick=()=>document.querySelectorAll('.tsTargetCheck').forEach(cb=>{cb.checked=false;});
+document.getElementById('tsCopyToCurrent').onclick=()=>{
+  const src=+document.getElementById('tsCopySource').value, dst=instPendingTrack??song.activeTrack;
+  if(src===dst){showToast('コピー元とコピー先が同じトラックです');return;}
+  tsApplySettings(tsCaptureTrack(src),dst,tsSelectedOptions());
+  reschedulePlaybackNow();drawAll();updateVoiceEditButton();showToast(`${dst+1}番トラックに設定をコピーしました`);
+};
+document.getElementById('tsCopyToTargets').onclick=()=>{
+  const src=instPendingTrack??song.activeTrack, snapshot=tsCaptureTrack(src), opts=tsSelectedOptions();
+  const dsts=[...document.querySelectorAll('.tsTargetCheck:checked')].map(cb=>+cb.value).filter(i=>i!==src);
+  if(!dsts.length){showToast('コピー先トラックを選択してください');return;}
+  dsts.forEach(i=>tsApplySettings(snapshot,i,opts));
+  reschedulePlaybackNow();drawAll();updateVoiceEditButton();showToast(`${dsts.length}トラックに設定を適用しました`);
+};
+document.getElementById('tsMemorySave').onclick=()=>{
+  const idx=+(document.getElementById('tsMemorySlot').value||1)-1, src=instPendingTrack??song.activeTrack;
+  const existing=song.trackSettingMemory[idx];
+  const name=prompt('メモリ名を入力してください',existing?.name||`Track ${src+1} 設定`);
+  if(name===null)return;
+  song.trackSettingMemory[idx]={name:name.trim()||`設定 ${idx+1}`,settings:tsCaptureTrack(src)};
+  openTrackSettingsCopyDialog();document.getElementById('tsMemorySlot').value=String(idx+1);tsRefreshMemoryStatus();
+  showToast(`設定メモリ ${idx+1} に保存しました`);
+};
+document.getElementById('tsMemoryLoad').onclick=()=>{
+  const idx=+(document.getElementById('tsMemorySlot').value||1)-1, item=(song.trackSettingMemory||[])[idx];
+  if(!item||!item.settings){showToast('このメモリは空です');return;}
+  const dst=instPendingTrack??song.activeTrack;
+  tsApplySettings(item.settings,dst,{instrument:true,adsr:true,mix:true,automation:true});
+  reschedulePlaybackNow();drawAll();updateVoiceEditButton();showToast(`設定メモリ ${idx+1} を適用しました`);
+};
 
 /* ---- User SF2 library ----
    Custom SoundFonts are separate from the default GM bank. Tracks store only a
@@ -4531,7 +4762,7 @@ function renderSynthPane(){
   const voiceRow = document.createElement('div'); voiceRow.className='listrow';
   if(tr.instrumentType==='voice') voiceRow.classList.add('selected');
   voiceRow.innerHTML = `<div style="display:flex;align-items:center;"><span class="dot"></span>Voice Synth</div>`;
-  voiceRow.onclick=()=>{ tr.instrumentType='voice'; renderSynthPane(); reschedulePlaybackNow(); updateVoiceEditButton(); };
+  voiceRow.onclick=()=>{ tr.instrumentType='voice'; renderSynthPane(); updateTrackGridUI(); reschedulePlaybackNow(); updateVoiceEditButton(); };
   body.appendChild(voiceRow);
 }
 document.getElementById('instCatSwitch').onclick=()=>{
@@ -4549,12 +4780,12 @@ document.getElementById('instCatSwitch').onclick=()=>{
 document.getElementById('instOk').onclick=()=>{ closeOverlay('instOverlay'); updateTrackGridUI(); };
 document.getElementById('instCustomBtn').onclick=()=>{
   const tr = song.tracks[instPendingTrack];
-  if(tr.instrumentType==='fm') openFmEnvelopeDialog(instPendingTrack);
-  else showToast('ADSR設定は今後追加予定です');
+  if(tr.instrument===-1){ showToast('ドラムトラックではADSR設定を使用できません'); return; }
+  openTrackEnvelopeDialog(instPendingTrack);
 };
 document.getElementById('instWaveBtn').onclick=()=>{
   const tr = song.tracks[instPendingTrack];
-  if(tr.instrumentType==='voice') { openVoiceModeDialog(); return; }
+  if(tr.instrumentType==='voice') { openVoiceSynthEditor(); return; }
   if(tr.instrumentType==='fm') openFmSynthDialog(instPendingTrack);
   else openWaveformEditor(instPendingTrack);
 };
@@ -4973,31 +5204,85 @@ document.getElementById('fmMemorySlotBtn').onclick=()=>{
   openOverlay('fmMemoryOverlay');
 };
 
-/* ---- ADSR envelope dialog ---- */
-function openFmEnvelopeDialog(trackIdx){
-  fmEditTrack = trackIdx;
-  const env = currentFmPreset().envelope;
-  document.getElementById('fmAttackSlider').value = env.attack;
-  document.getElementById('fmAttackVal').textContent = env.attack.toFixed(2);
-  document.getElementById('fmDecaySlider').value = env.decay;
-  document.getElementById('fmDecayVal').textContent = env.decay.toFixed(2);
-  document.getElementById('fmSustainSlider').value = env.sustain;
-  document.getElementById('fmSustainVal').textContent = env.sustain.toFixed(2);
-  document.getElementById('fmReleaseSlider').value = env.release;
-  document.getElementById('fmReleaseVal').textContent = env.release.toFixed(2);
+/* ---- ADSR envelope dialog: FM uses its preset envelope; other melodic tracks use per-track ADSR ---- */
+function getTrackEnvelope(trackIdx){
+  const tr=song.tracks[trackIdx];
+  if(tr.instrumentType==='fm') return currentFmPresetForTrack(tr, 0).envelope || defaultFmEnvelope();
+  return tr.adsr || defaultFmEnvelope();
+}
+function currentFmPresetForTrack(tr,tick){ return getFmPresetForTrack(tr,tick); }
+function openTrackEnvelopeDialog(trackIdx){
+  fmEditTrack=trackIdx;
+  const tr=song.tracks[trackIdx];
+  const env=tr.instrumentType==='fm' ? (currentFmPreset().envelope || defaultFmEnvelope()) : (tr.adsr || defaultFmEnvelope());
+  document.getElementById('adsrDialogTitle').textContent=(tr.instrumentType==='fm'?'FM Synth':'トラック')+' エンベロープ(ADSR)';
+  document.getElementById('fmAttackSlider').value=env.attack;
+  document.getElementById('fmAttackVal').textContent=env.attack.toFixed(2);
+  document.getElementById('fmDecaySlider').value=env.decay;
+  document.getElementById('fmDecayVal').textContent=env.decay.toFixed(2);
+  document.getElementById('fmSustainSlider').value=env.sustain;
+  document.getElementById('fmSustainVal').textContent=env.sustain.toFixed(2);
+  document.getElementById('fmReleaseSlider').value=env.release;
+  document.getElementById('fmReleaseVal').textContent=env.release.toFixed(2);
+  drawFmEnvelopeGraph(env);
   openOverlay('fmEnvelopeOverlay');
 }
-function fmEnvSliderChanged(){
-  const env = currentFmPreset().envelope;
-  env.attack = +document.getElementById('fmAttackSlider').value;
-  env.decay = +document.getElementById('fmDecaySlider').value;
-  env.sustain = +document.getElementById('fmSustainSlider').value;
-  env.release = +document.getElementById('fmReleaseSlider').value;
-  document.getElementById('fmAttackVal').textContent = env.attack.toFixed(2);
-  document.getElementById('fmDecayVal').textContent = env.decay.toFixed(2);
-  document.getElementById('fmSustainVal').textContent = env.sustain.toFixed(2);
-  document.getElementById('fmReleaseVal').textContent = env.release.toFixed(2);
+function openFmEnvelopeDialog(trackIdx){ openTrackEnvelopeDialog(trackIdx); }
+function resetTrackEnvelopeDialog(){
+  const tr=song.tracks[fmEditTrack];
+  if(!tr) return;
+  let env;
+  if(tr.instrumentType==='fm'){
+    const preset=currentFmPreset();
+    preset.envelope=defaultFmEnvelope();
+    env=preset.envelope;
+  }else{
+    // Remove the track override so the instrument returns to its default envelope.
+    delete tr.adsr;
+    env=defaultFmEnvelope();
+  }
+  document.getElementById('fmAttackSlider').value=env.attack;
+  document.getElementById('fmDecaySlider').value=env.decay;
+  document.getElementById('fmSustainSlider').value=env.sustain;
+  document.getElementById('fmReleaseSlider').value=env.release;
+  document.getElementById('fmAttackVal').textContent=env.attack.toFixed(2);
+  document.getElementById('fmDecayVal').textContent=env.decay.toFixed(2);
+  document.getElementById('fmSustainVal').textContent=env.sustain.toFixed(2);
+  document.getElementById('fmReleaseVal').textContent=env.release.toFixed(2);
+  drawFmEnvelopeGraph(env);
   reschedulePlaybackNow();
+}
+document.getElementById('adsrResetBtn').onclick=resetTrackEnvelopeDialog;
+
+function fmEnvSliderChanged(){
+  const tr=song.tracks[fmEditTrack];
+  if(!tr) return;
+  let env;
+  if(tr.instrumentType==='fm'){
+    const preset=currentFmPreset();
+    if(!preset.envelope) preset.envelope=defaultFmEnvelope();
+    env=preset.envelope;
+  }
+  else { if(!tr.adsr) tr.adsr=defaultFmEnvelope(); env=tr.adsr; }
+  env.attack=+document.getElementById('fmAttackSlider').value;
+  env.decay=+document.getElementById('fmDecaySlider').value;
+  env.sustain=+document.getElementById('fmSustainSlider').value;
+  env.release=+document.getElementById('fmReleaseSlider').value;
+  document.getElementById('fmAttackVal').textContent=env.attack.toFixed(2);
+  document.getElementById('fmDecayVal').textContent=env.decay.toFixed(2);
+  document.getElementById('fmSustainVal').textContent=env.sustain.toFixed(2);
+  document.getElementById('fmReleaseVal').textContent=env.release.toFixed(2);
+  drawFmEnvelopeGraph(env);
+  reschedulePlaybackNow();
+}
+function drawFmEnvelopeGraph(env){
+  const x0=18,y0=118,top=12,right=308,h=y0-top;
+  const a=Math.max(.015,env.attack),d=Math.max(.015,env.decay),hold=.55,r=Math.max(.03,env.release);
+  const total=a+d+hold+r,scale=(right-x0)/total;
+  const xa=Math.min(right-3,x0+a*scale),xd=Math.min(right-3,xa+d*scale),xoff=Math.min(right-3,xd+hold*scale),xr=right;
+  const ys=y0-env.sustain*h;
+  document.getElementById('fmEnvelopeLine').setAttribute('d',`M${x0} ${y0} L${xa} ${top} L${xd} ${ys} L${xoff} ${ys} L${xr} ${y0}`);
+  document.getElementById('fmEnvelopeFill').setAttribute('d',`M${x0} ${y0} L${xa} ${top} L${xd} ${ys} L${xoff} ${ys} L${xr} ${y0} Z`);
 }
 document.getElementById('fmAttackSlider').oninput=fmEnvSliderChanged;
 document.getElementById('fmDecaySlider').oninput=fmEnvSliderChanged;
@@ -5116,7 +5401,7 @@ function openMixer(){
   const body = document.getElementById('mixerBody'); body.innerHTML='';
   song.tracks.forEach((tr,i)=>{
     const row = document.createElement('div'); row.className='mixch';
-    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : GM_INSTRUMENTS[tr.instrument]);
+    const instName = tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='voice' ? 'Voice Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : GM_INSTRUMENTS[tr.instrument]);
     row.innerHTML = `
       <div class="bar ${i===song.activeTrack?'active':''}"></div>
       <div class="name">${i+1}</div>
@@ -5442,12 +5727,16 @@ function sf2Voice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato)
   }
   const g = actx.createGain();
   const peak = Math.pow(10,-params.attenuationCb/200) * Math.max(0.05, vel/127);
-  const sustain = Math.max(0.0001, peak*Math.pow(10,-params.sustainCb/200));
-  const t0 = when + Math.max(0,params.delay);
-  const atk = Math.max(0.001, params.attack);
-  const hold = Math.max(0, params.hold);
-  const dec = Math.max(0.001, params.decay);
-  const REL = 0.3; // fixed release fade after note-off, regardless of the patch's own (often much longer) release time
+  // Read the optional track ADSR before calculating sustain. Declaring this
+  // after the expression triggers a temporal-dead-zone ReferenceError, causing
+  // every SoundFont preset voice to fall back to the procedural oscillator.
+  const trackEnv=tr.adsr;
+  const sustain = Math.max(0.0001, trackEnv ? peak*Math.max(0,Math.min(1,trackEnv.sustain)) : peak*Math.pow(10,-params.sustainCb/200));
+  const t0 = when + (trackEnv ? 0 : Math.max(0,params.delay));
+  const atk = Math.max(0.001, trackEnv ? trackEnv.attack : params.attack);
+  const hold = trackEnv ? 0 : Math.max(0,params.hold);
+  const dec = Math.max(0.001, trackEnv ? trackEnv.decay : params.decay);
+  const REL = Math.max(0.01, trackEnv ? trackEnv.release : 0.3); // custom track release or existing SF2 release
   const peakTime = t0+atk, holdEnd = peakTime+hold, decEnd = holdEnd+dec;
   const noteOff = when+dur; // note-off always cuts whichever phase is in progress, like a real synth's note-off
 
@@ -5485,7 +5774,52 @@ function sf2Voice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato)
 
 /* ---- fallback procedural synth (used until a soundfont is ready, or if a
    preset/sample lookup fails for the current track's instrument) ---- */
-function fallbackVoice(ctx, when, freq, dur, category, destNode, register, pitchCurve, vibrato){
+const gmFallbackWaveCache = new Map();
+function getGmFallbackWave(program){
+  const p=Math.max(0,Math.min(127,program|0));
+  if(gmFallbackWaveCache.has(p)) return gmFallbackWaveCache.get(p);
+  // Keep the no-SF2 live-playback fallback recognizably different for each
+  // GM family instead of reducing every preset to the same basic oscillator.
+  const family=Math.floor(p/8), variant=p%8;
+  const profiles=[
+    [1,.34,.18,.09,.045], [1,.48,.27,.15,.08], [.85,.42,.25,.14,.08],
+    [.8,.55,.36,.22,.12], [.9,.30,.12,.06,.03], [.72,.50,.32,.18,.10],
+    [.75,.55,.34,.20,.12], [.9,.28,.14,.07,.035], [.8,.22,.10,.05,.025],
+    [.75,.35,.18,.09,.04], [.7,.45,.25,.13,.06], [.85,.4,.2,.1,.05],
+    [.8,.55,.3,.16,.08], [.8,.25,.14,.08,.04], [.65,.45,.3,.2,.12],
+    [.75,.35,.2,.1,.06]
+  ];
+  const base=profiles[family]||profiles[0];
+  const N=256, samples=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    const t=i/N, ph=2*Math.PI*t;
+    let y=0;
+    if(family===1 || family===9 || family===14){
+      // Bell/mallet/ethnic families: add inharmonic partials.
+      for(let h=0;h<base.length;h++) y+=base[h]*Math.sin(ph*(h+1)*(h===2?1.013:1));
+      y+=.12*Math.sin(ph*(2.3+(variant%4)*.37));
+    }else if(family===10 || family===11 || family===12){
+      const saw=2*(t-Math.floor(t+.5));
+      y=.45*Math.sin(ph)+.25*Math.sin(ph*2)+.15*Math.sin(ph*3)+.12*saw;
+      if(variant%3===1) y=.65*Math.sin(ph)+.25*Math.sin(ph*1.5)+.12*Math.sin(ph*2.5);
+    }else if(family===2 || family===5 || family===6){
+      for(let h=0;h<base.length;h++) y+=base[h]*Math.sin(ph*(h+1));
+      y+=.08*Math.sin(ph*(1.002+(variant%4)*.001));
+    }else if(family===7 || family===8 || family===13){
+      const square=t<.5?1:-1;
+      for(let h=0;h<base.length;h++) y+=base[h]*Math.sin(ph*(h+1));
+      if(variant%2===1) y=.65*square+.2*Math.sin(ph)+.1*Math.sin(ph*3);
+    }else{
+      for(let h=0;h<base.length;h++) y+=base[h]*Math.sin(ph*(h+1));
+    }
+    // Slight per-program brightness variation without changing the ADSR.
+    samples[i]=y*(.88+variant*.035);
+  }
+  const wave=computePeriodicWave(samples);
+  gmFallbackWaveCache.set(p,wave);
+  return wave;
+}
+function fallbackVoice(ctx, when, freq, dur, category, destNode, register, pitchCurve, vibrato, envelope=null, program=null){
   const g = ctx.createGain();
   g.gain.value = 0;
   g.connect(destNode);
@@ -5502,17 +5836,24 @@ function fallbackVoice(ctx, when, freq, dur, category, destNode, register, pitch
     return {src,g};
   }
   const osc1 = ctx.createOscillator();
-  osc1.type = category==='pad' ? 'sawtooth' : category==='bass' ? 'sine' : 'triangle';
+  if(program!=null && program>=0 && program<128){
+    try{ osc1.setPeriodicWave(getGmFallbackWave(program)); }
+    catch(_){ osc1.type = category==='pad' ? 'sawtooth' : category==='bass' ? 'sine' : 'triangle'; }
+  }else{
+    osc1.type = category==='pad' ? 'sawtooth' : category==='bass' ? 'sine' : 'triangle';
+  }
   osc1.frequency.value = freq;
   applyPitchCurveToParam(osc1.frequency, freq, when, dur, pitchCurve);
   applyVibrato(osc1.frequency, freq, when, dur, vibrato);
   osc1.connect(g);
-  const atk=0.01, rel=Math.min(0.4,dur*0.5);
-  g.gain.setValueAtTime(0, when);
-  g.gain.linearRampToValueAtTime(0.28, when+atk);
-  g.gain.setValueAtTime(0.28, when+Math.max(atk,dur-rel));
-  g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
-  osc1.start(when); osc1.stop(when+dur+0.05);
+  if(envelope){
+    const atk=Math.max(.002,envelope.attack),dec=Math.max(.002,envelope.decay),sus=Math.max(0,Math.min(1,envelope.sustain)),rel=Math.max(.01,envelope.release),off=when+dur,relStart=Math.max(when+atk+dec,off);
+    g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(.28,when+atk);g.gain.linearRampToValueAtTime(.28*sus,when+atk+dec);g.gain.setValueAtTime(.28*sus,relStart);g.gain.exponentialRampToValueAtTime(.0001,relStart+rel);osc1.start(when);osc1.stop(relStart+rel+.05);
+  }else{
+    const atk=0.01,rel=Math.min(0.4,dur*0.5);
+    g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(0.28,when+atk);g.gain.setValueAtTime(0.28,when+Math.max(atk,dur-rel));g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
+    osc1.start(when);osc1.stop(when+dur+0.05);
+  }
   if(register) activeVoices.push({src:osc1,g});
   return {src:osc1,g};
 }
@@ -5558,15 +5899,19 @@ function retroSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, v
   applyPitchCurveToParam(osc.frequency, freq, when, dur, pitchCurve);
   applyVibrato(osc.frequency, freq, when, dur, vibrato);
   const g = actx.createGain();
-  const atk=0.008, rel=0.15;
-  const peak = Math.max(0.05, vel/127)*0.25;
-  g.gain.setValueAtTime(0, when);
-  g.gain.linearRampToValueAtTime(peak, when+atk);
-  g.gain.setValueAtTime(peak, when+Math.max(atk, dur));
-  g.gain.exponentialRampToValueAtTime(0.0001, when+dur+rel);
+  const env=song.tracks[trackIdx].adsr;
+  const peak=Math.max(0.05,vel/127)*0.25;
+  let stopAt=when+dur+0.20;
+  if(env){
+    const atk=Math.max(.002,env.attack),dec=Math.max(.002,env.decay),sus=Math.max(0,Math.min(1,env.sustain)),rel=Math.max(.01,env.release),off=when+dur,relStart=Math.max(when+atk+dec,off);
+    g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(peak,when+atk);g.gain.linearRampToValueAtTime(peak*sus,when+atk+dec);g.gain.setValueAtTime(peak*sus,relStart);g.gain.exponentialRampToValueAtTime(.0001,relStart+rel);stopAt=relStart+rel+.05;
+  }else{
+    const atk=0.008,rel=0.15;
+    g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(peak,when+atk);g.gain.setValueAtTime(peak,when+Math.max(atk,dur));g.gain.exponentialRampToValueAtTime(0.0001,when+dur+rel);stopAt=when+dur+rel+.05;
+  }
   osc.connect(g);
   g.connect(trackNodes[trackIdx].gain);
-  osc.start(when); osc.stop(when+dur+rel+0.05);
+  osc.start(when); osc.stop(stopAt);
   const handle = {src:osc, g};
   if(register) activeVoices.push(handle);
   return handle;
@@ -5688,7 +6033,71 @@ function scheduleVolumeAutomation(nowTick,aheadTick){
   });
 }
 
-function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, noteTick){
+
+/* ---- Voice Synth playback: convert the saved harmonic spectrum into a PeriodicWave.
+   The vowel is selected from the note's visible voiceChar (あいうえお); notes without
+   a character use the editor's currently selected vowel. ---- */
+const voiceSynthWaveCache = new Map();
+function voiceSynthVowelKey(ch, data){
+  const map={'あ':'a','ア':'a','a':'a','A':'a','い':'i','イ':'i','i':'i','I':'i','う':'u','ウ':'u','u':'u','U':'u','え':'e','エ':'e','e':'e','E':'e','お':'o','オ':'o','o':'o','O':'o'};
+  return map[String(ch||'').trim()] || (['a','i','u','e','o'].includes(data?.currentVowel)?data.currentVowel:'a');
+}
+function getVoiceSynthPeriodicWave(trackIdx, vowel){
+  const tr=song.tracks[trackIdx], data=tr&&tr.voiceSynthData;
+  if(!data) return null;
+  const raw=(data.vowels&&Array.isArray(data.vowels[vowel])&&data.vowels[vowel].some(x=>Number(x)>0))
+    ? data.vowels[vowel] : data.harmonics;
+  if(!Array.isArray(raw)||!raw.some(x=>Number(x)>0)) return null;
+  const amps=raw.slice(0,256).map(x=>Math.max(0,Math.min(1,Number(x)||0)));
+  const key=trackIdx+':'+vowel+':'+JSON.stringify(amps);
+  if(voiceSynthWaveCache.has(key)) return voiceSynthWaveCache.get(key);
+  const count=amps.length+1;
+  const real=new Float32Array(count), imag=new Float32Array(count);
+  for(let i=0;i<amps.length;i++) real[i+1]=amps[i];
+  let wave;
+  try{ wave=actx.createPeriodicWave(real,imag,{disableNormalization:false}); }
+  catch(err){ console.warn('Voice Synth waveform failed',err); return null; }
+  voiceSynthWaveCache.set(key,wave);
+  // Keep the cache bounded if the user repeatedly edits spectra.
+  if(voiceSynthWaveCache.size>80) voiceSynthWaveCache.delete(voiceSynthWaveCache.keys().next().value);
+  return wave;
+}
+function voiceSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, voiceChar){
+  const tr=song.tracks[trackIdx];
+  const data=tr&&tr.voiceSynthData;
+  if(!data) return null;
+  const vowel=voiceSynthVowelKey(voiceChar,data);
+  const wave=getVoiceSynthPeriodicWave(trackIdx,vowel);
+  if(!wave) return null;
+  const freq=midiToFreq(note);
+  const osc=actx.createOscillator();
+  osc.setPeriodicWave(wave);
+  osc.frequency.setValueAtTime(freq,when);
+  applyPitchCurveToParam(osc.frequency,freq,when,dur,pitchCurve);
+  applyVibrato(osc.frequency,freq,when,dur,vibrato);
+  const g=actx.createGain();
+  const outputGain=Math.max(0,Math.min(8,Number(data.outputGain??1)));
+  const vowelGain=Math.max(0,Math.min(8,Number(data.vowelGains?.[vowel]??1)));
+  const peak=Math.max(.05,Math.min(1,(vel??100)/127))*.28*outputGain*vowelGain;
+  const noteOff=when+dur, env=tr.adsr;
+  let stopAt=noteOff+.25;
+  if(env){
+    const atk=Math.max(.002,env.attack),dec=Math.max(.002,env.decay),sus=Math.max(0,Math.min(1,env.sustain)),rel=Math.max(.01,env.release),releaseStart=Math.max(when+atk+dec,noteOff);
+    g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(peak,when+atk);g.gain.linearRampToValueAtTime(peak*sus,when+atk+dec);g.gain.setValueAtTime(peak*sus,releaseStart);g.gain.exponentialRampToValueAtTime(.0001,releaseStart+rel);stopAt=releaseStart+rel+.04;
+  }else{
+    const atk=.008,rel=Math.min(.18,Math.max(.06,dur*.35));
+    const releaseStart=Math.max(when+atk,noteOff-rel);
+    g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(peak,when+atk);g.gain.setValueAtTime(peak,releaseStart);g.gain.setTargetAtTime(.0001,releaseStart,Math.max(.01,rel/5));stopAt=noteOff+rel+.04;
+  }
+  osc.connect(g);
+  g.connect(trackNodes[trackIdx].gain);
+  osc.start(when); osc.stop(stopAt);
+  const handle={src:osc,g};
+  if(register) activeVoices.push(handle);
+  return handle;
+}
+
+function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, noteTick, voiceChar){
   const tr = song.tracks[trackIdx];
   if(tr.instrumentType==='fm'){
     try{ return fmSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, getFmPresetForTrack(tr, noteTick||0)); }
@@ -5698,11 +6107,17 @@ function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibra
     try{ return retroSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato); }
     catch(err){ console.warn('retro synth voice failed, falling back', err); }
   }
+  if(tr.instrumentType==='voice'){
+    try{
+      const h=voiceSynthVoice(trackIdx,when,note,vel,dur,register,pitchCurve,vibrato,voiceChar);
+      if(h) return h;
+    }catch(err){ console.warn('Voice Synth voice failed, falling back',err); }
+  }
   if(sf2Ready || tr.instrumentType==='sf2') {
     try{ const h = sf2Voice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato); if(h) return h; }
     catch(err){ console.warn('sf2 voice failed, falling back', err); }
   }
-  return fallbackVoice(actx, when, midiToFreq(note), dur, categoryFor(tr.instrument), trackNodes[trackIdx].gain, register, pitchCurve, vibrato);
+  return fallbackVoice(actx, when, midiToFreq(note), dur, categoryFor(tr.instrument), trackNodes[trackIdx].gain, register, pitchCurve, vibrato, tr.instrument===-1?null:tr.adsr, tr.instrumentType==='preset' && tr.instrument>=0 ? tr.instrument : null);
 }
 
 /* ---- audio graph: master -> per-track (gain -> pan) ---- */
@@ -6055,7 +6470,7 @@ function runScheduler(){
     const {ti,nt} = scheduleQueue[scheduleIdx];
     const when = playStartTime + tickSpanSeconds(playStartTick, nt.startTick);
     const dur = Math.max(0.01, tickSpanSeconds(nt.startTick, effectiveNoteEndTick(ti, nt)));
-    triggerNote(ti, when, nt.pitch, nt.velocity ?? 100, dur, true, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick);
+    triggerNote(ti, when, nt.pitch, nt.velocity ?? 100, dur, true, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick, nt.voiceChar);
     scheduleIdx++;
   }
   if(!loopEnabled && scheduleIdx>=scheduleQueue.length && nowTick > scheduleEndTick+ (PPQ*2)){
@@ -6118,6 +6533,82 @@ function init(){
   updatePitchOverlayInteractivity();
   setPanEditMode(false);
 }
+
+// Embedded Voice Synth editor. Base64 keeps the embedded HTML safe inside this script.
+const voiceSynthDocumentBase64 = 'PCFkb2N0eXBlIGh0bWw+CjxodG1sIGxhbmc9ImphIj4KPGhlYWQ+CjxtZXRhIGNoYXJzZXQ9InV0Zi04Ij4KPG1ldGEgbmFtZT0idmlld3BvcnQiIGNvbnRlbnQ9IndpZHRoPWRldmljZS13aWR0aCxpbml0aWFsLXNjYWxlPTEsdmlld3BvcnQtZml0PWNvdmVyIj4KPHRpdGxlPlZvaWNlIFN5bnRoIHYxPC90aXRsZT4KPHN0eWxlPgo6cm9vdHstLWJnOiMxMDEzMWE7LS1wYW5lbDojMTgxZDI3Oy0tcGFuZWwyOiMyMDI3MzU7LS10ZXh0OiNlZWYyZjc7LS1tdXRlZDojOWFhNmI3Oy0tYWNjZW50OiM3ZGQzZmM7LS1hY2NlbnQyOiNjNGI1ZmQ7LS1kYW5nZXI6I2ZiNzE4NX0KKntib3gtc2l6aW5nOmJvcmRlci1ib3h9CmJvZHl7bWFyZ2luOjA7YmFja2dyb3VuZDpsaW5lYXItZ3JhZGllbnQoMTgwZGVnLCMwZDExMTcsIzE1MWEyMyk7Y29sb3I6dmFyKC0tdGV4dCk7Zm9udC1mYW1pbHk6c3lzdGVtLXVpLC1hcHBsZS1zeXN0ZW0sQmxpbmtNYWNTeXN0ZW1Gb250LCJOb3RvIFNhbnMgSlAiLHNhbnMtc2VyaWZ9CmJ1dHRvbixpbnB1dCxzZWxlY3R7Zm9udDppbmhlcml0fQpidXR0b257Ym9yZGVyOjA7Ym9yZGVyLXJhZGl1czoxMHB4O3BhZGRpbmc6OXB4IDEycHg7YmFja2dyb3VuZDp2YXIoLS1wYW5lbDIpO2NvbG9yOnZhcigtLXRleHQpO2N1cnNvcjpwb2ludGVyfQpidXR0b246aG92ZXJ7ZmlsdGVyOmJyaWdodG5lc3MoMS4xNSl9CmJ1dHRvbi5wcmltYXJ5e2JhY2tncm91bmQ6dmFyKC0tYWNjZW50KTtjb2xvcjojMDcxMDE4O2ZvbnQtd2VpZ2h0OjcwMH0KYnV0dG9uLmFjdGl2ZXtvdXRsaW5lOjJweCBzb2xpZCB2YXIoLS1hY2NlbnQpfQouYXBwe21heC13aWR0aDoxMTAwcHg7bWFyZ2luOmF1dG87cGFkZGluZzoxNnB4fQojdm9pY2VOYW1lQmFye21hcmdpbjowIDAgMTJweDtwYWRkaW5nOjJweCA0cHg7Y29sb3I6dmFyKC0tdGV4dCk7Zm9udC1zaXplOjIycHg7Zm9udC13ZWlnaHQ6NzAwO21pbi1oZWlnaHQ6MzRweDtjdXJzb3I6dGV4dDtvdmVyZmxvdy13cmFwOmFueXdoZXJlfQojdm9pY2VOYW1lQmFyOjphZnRlcntjb250ZW50OiIg4pyOIjtmb250LXNpemU6MTRweDtjb2xvcjp2YXIoLS1tdXRlZCk7Zm9udC13ZWlnaHQ6NDAwfQojdm9pY2VOYW1lSW5wdXR7d2lkdGg6MTAwJTtmb250LXNpemU6MjJweDtmb250LXdlaWdodDo3MDA7YmFja2dyb3VuZDojMGYxNDFjO2JvcmRlcjoxcHggc29saWQgdmFyKC0tYWNjZW50KTtib3JkZXItcmFkaXVzOjhweDtwYWRkaW5nOjVweCA4cHg7Y29sb3I6dmFyKC0tdGV4dCl9Ci50b29sYmFyLC5jb250cm9scywucHJldmlldywuYWR2YW5jZWR7ZGlzcGxheTpmbGV4O2dhcDo4cHg7ZmxleC13cmFwOndyYXA7YWxpZ24taXRlbXM6Y2VudGVyfQouY2FyZHtiYWNrZ3JvdW5kOnJnYmEoMjQsMjksMzksLjk2KTtib3JkZXI6MXB4IHNvbGlkICMyYjM0NDQ7Ym9yZGVyLXJhZGl1czoxNnB4O3BhZGRpbmc6MTRweDttYXJnaW4tYm90dG9tOjEycHh9CmxhYmVse2NvbG9yOnZhcigtLW11dGVkKTtmb250LXNpemU6MTNweH0KLmNvbnRyb2x7ZGlzcGxheTpmbGV4O2ZsZXgtZGlyZWN0aW9uOmNvbHVtbjtnYXA6NXB4O21pbi13aWR0aDoxMzBweH0KaW5wdXRbdHlwZT1udW1iZXJdLHNlbGVjdHtiYWNrZ3JvdW5kOiMwZjE0MWM7Ym9yZGVyOjFweCBzb2xpZCAjMzQ0MDUyO2NvbG9yOnZhcigtLXRleHQpO2JvcmRlci1yYWRpdXM6OXB4O3BhZGRpbmc6OHB4fQppbnB1dFt0eXBlPXJhbmdlXXthY2NlbnQtY29sb3I6dmFyKC0tYWNjZW50KTt3aWR0aDoxNjBweH0KI3NwZWN0cnVte3dpZHRoOjEwMCU7aGVpZ2h0OjMzMHB4O2Rpc3BsYXk6YmxvY2s7YmFja2dyb3VuZDojMGMxMDE2O2JvcmRlci1yYWRpdXM6MTJweDt0b3VjaC1hY3Rpb246bm9uZX0KI3dhdmV7d2lkdGg6MTAwJTtoZWlnaHQ6MTUwcHg7ZGlzcGxheTpibG9jaztiYWNrZ3JvdW5kOiMwYzEwMTY7Ym9yZGVyLXJhZGl1czoxMnB4fQoudm93ZWwtdGFic3tkaXNwbGF5OmZsZXg7Z2FwOjRweH0KLnZvd2VsLXRhYntmbGV4OjE7bWluLXdpZHRoOjM0cHg7cGFkZGluZzo3cHggMTBweDtib3JkZXI6MXB4IHNvbGlkICMzNDQwNTI7YmFja2dyb3VuZDojMGYxNDFjfQoudm93ZWwtdGFiLmFjdGl2ZXtiYWNrZ3JvdW5kOnZhcigtLWFjY2VudDIpO2NvbG9yOiMxMDEzMWE7b3V0bGluZToycHggc29saWQgdmFyKC0tYWNjZW50Mik7Zm9udC13ZWlnaHQ6NzAwfQouc3BlY3RydW0tZWRpdG9ye2JvcmRlcjoxcHggc29saWQgIzM5NDY1YTtib3JkZXItcmFkaXVzOjEycHg7b3ZlcmZsb3c6aGlkZGVuO2JhY2tncm91bmQ6IzBjMTAxNn0KLnNwZWN0cnVtLWVkaXRvciAudm93ZWwtdGFic3tnYXA6MDtwYWRkaW5nOjVweCA1cHggMDtiYWNrZ3JvdW5kOiMxNTFiMjU7Ym9yZGVyLWJvdHRvbToxcHggc29saWQgIzM5NDY1YX0KLnNwZWN0cnVtLWVkaXRvciAudm93ZWwtdGFie2JvcmRlcjoxcHggc29saWQgdHJhbnNwYXJlbnQ7Ym9yZGVyLXJhZGl1czo4cHggOHB4IDAgMDtiYWNrZ3JvdW5kOnRyYW5zcGFyZW50O2NvbG9yOnZhcigtLW11dGVkKTtwYWRkaW5nOjhweCAxMHB4fQouc3BlY3RydW0tZWRpdG9yIC52b3dlbC10YWIuYWN0aXZle2JhY2tncm91bmQ6IzBjMTAxNjtjb2xvcjp2YXIoLS1hY2NlbnQyKTtib3JkZXItY29sb3I6IzM5NDY1YTtib3JkZXItYm90dG9tLWNvbG9yOiMwYzEwMTY7b3V0bGluZTpub25lfQouc3BlY3RydW0tZWRpdG9yICNzcGVjdHJ1bXtib3JkZXItcmFkaXVzOjB9Ci5zcGVjdHJ1bS10b29sc3tkaXNwbGF5OmZsZXg7YWxpZ24taXRlbXM6Y2VudGVyO2dhcDo1cHg7ZmxleC13cmFwOndyYXB9Ci5zcGVjdHJ1bS10b29scyBidXR0b257cGFkZGluZzo1cHggOXB4fQogLnNwZWN0cnVtLXRvb2xzIGJ1dHRvbjpkaXNhYmxlZHtvcGFjaXR5Oi4zNTtjdXJzb3I6ZGVmYXVsdH0KLmdhaW4tY29udHJvbHtkaXNwbGF5OmZsZXg7YWxpZ24taXRlbXM6Y2VudGVyO2dhcDoxMHB4O2ZsZXgtd3JhcDp3cmFwO21hcmdpbjoxMHB4IDAgNHB4O3BhZGRpbmc6MTBweCAxMnB4O2JhY2tncm91bmQ6IzExMTcyMDtib3JkZXI6MXB4IHNvbGlkICMyYjM0NDQ7Ym9yZGVyLXJhZGl1czoxMHB4fQouZ2Fpbi1jb250cm9sIGxhYmVse2NvbG9yOnZhcigtLXRleHQpO2ZvbnQtc2l6ZToxNHB4O2ZvbnQtd2VpZ2h0OjYwMDt3aGl0ZS1zcGFjZTpub3dyYXB9Ci5nYWluLWNvbnRyb2wgaW5wdXRbdHlwZT1yYW5nZV17ZmxleDoxIDEgMTMwcHg7bWluLXdpZHRoOjEwMHB4O3dpZHRoOjEwMCU7YWNjZW50LWNvbG9yOnZhcigtLWFjY2VudCl9CiN2b2ljZUdhaW5WYWx1ZXttaW4td2lkdGg6NThweDt0ZXh0LWFsaWduOnJpZ2h0O2ZvbnQtdmFyaWFudC1udW1lcmljOnRhYnVsYXItbnVtc30KLmdhaW4tY29udHJvbCAubm90ZXtmbGV4OjEgMCAxMDAlO2ZvbnQtc2l6ZToxMnB4O21hcmdpbjowfQouaW5saW5lLXNlbGVjdHtkaXNwbGF5OmZsZXg7YWxpZ24taXRlbXM6Y2VudGVyO2dhcDo4cHh9Ci5pbmxpbmUtc2VsZWN0IHNlbGVjdHtwYWRkaW5nOjVweCA4cHh9Ci5wcmV2aWV3LWlubGluZXtkaXNwbGF5OmZsZXg7ZmxleC1kaXJlY3Rpb246Y29sdW1uO2dhcDo3cHg7bWFyZ2luLXRvcDoxMHB4fQoucHJldmlldy1ub3Rlc3tkaXNwbGF5OmZsZXg7YWxpZ24taXRlbXM6Y2VudGVyO2dhcDo1cHg7d2lkdGg6MTAwJX0KLnByZXZpZXctbm90ZXMgW2RhdGEtbm90ZV17ZmxleDoxO21pbi13aWR0aDowO3BhZGRpbmc6N3B4IDNweH0KLm9jdGF2ZS1idG57ZmxleDowIDAgMzRweDtwYWRkaW5nOjdweCAwIWltcG9ydGFudDtmb250LXNpemU6MThweH0KLnByZXZpZXctYWN0aW9uc3tkaXNwbGF5OmZsZXg7Z2FwOjdweH0KLnByZXZpZXctYWN0aW9ucyBidXR0b257ZmxleDoxfQoudGVtcGxhdGUtaGVhZGluZ3tkaXNwbGF5OmZsZXg7anVzdGlmeS1jb250ZW50OnNwYWNlLWJldHdlZW47YWxpZ24taXRlbXM6Y2VudGVyO2dhcDoxMHB4O21hcmdpbi1ib3R0b206OHB4fQoudm9pY2UtdGFic3tkaXNwbGF5OmZsZXg7Z2FwOjRweH0KLnZvaWNlLXRhYntwYWRkaW5nOjZweCAxMnB4O2JvcmRlcjoxcHggc29saWQgIzM0NDA1MjtiYWNrZ3JvdW5kOiMwZjE0MWN9Ci52b2ljZS10YWIuYWN0aXZle2JhY2tncm91bmQ6dmFyKC0tYWNjZW50Mik7Y29sb3I6IzEwMTMxYTtvdXRsaW5lOjJweCBzb2xpZCB2YXIoLS1hY2NlbnQyKTtmb250LXdlaWdodDo3MDB9Ci50ZW1wbGF0ZS12b3dlbHN7ZGlzcGxheTpmbGV4O2dhcDo2cHg7bWFyZ2luLWJvdHRvbToxMnB4fQoudGVtcGxhdGUtdm93ZWxzIGJ1dHRvbntmbGV4OjF9Ci5mb290ZXItYWN0aW9uc3tkaXNwbGF5OmZsZXg7Z2FwOjdweDtmbGV4LXdyYXA6d3JhcDttYXJnaW4tdG9wOjEycHg7cGFkZGluZy10b3A6MTJweDtib3JkZXItdG9wOjFweCBzb2xpZCAjMmIzNDQ0fQouZm9vdGVyLWFjdGlvbnMgYnV0dG9ue2ZsZXg6MX0KQG1lZGlhKG1heC13aWR0aDo2NTBweCl7I3NwZWN0cnVte2hlaWdodDoyMDBweH0udm93ZWwtY29udHJvbHttaW4td2lkdGg6MTAwJTt9LnZvd2VsLXRhYnN7d2lkdGg6MTAwJX0ucHJldmlldy1pbmxpbmV7Z2FwOjVweH0ucHJldmlldy1ub3Rlc3tnYXA6M3B4fS5wcmV2aWV3LW5vdGVzIFtkYXRhLW5vdGVde2ZvbnQtc2l6ZToxMnB4O3BhZGRpbmc6N3B4IDFweH0ub2N0YXZlLWJ0bntmbGV4LWJhc2lzOjMwcHh9LnRlbXBsYXRlLWhlYWRpbmd7YWxpZ24taXRlbXM6Y2VudGVyfS52b2ljZS10YWJ7cGFkZGluZzo2cHggOXB4fX0KLmxlZ2VuZHtkaXNwbGF5OmZsZXg7anVzdGlmeS1jb250ZW50OnNwYWNlLWJldHdlZW47Y29sb3I6dmFyKC0tbXV0ZWQpO2ZvbnQtc2l6ZToxMnB4O21hcmdpbi10b3A6NnB4fQoucGlsbHtwYWRkaW5nOjRweCA4cHg7Ym9yZGVyLXJhZGl1czo5OTlweDtiYWNrZ3JvdW5kOiMyNzMxNDI7Y29sb3I6I2NiZDVlMTtmb250LXNpemU6MTJweH0KLm5vdGV7Y29sb3I6dmFyKC0tbXV0ZWQpO2ZvbnQtc2l6ZToxM3B4O2xpbmUtaGVpZ2h0OjEuNX0KLnJvd3RpdGxle2Rpc3BsYXk6ZmxleDthbGlnbi1pdGVtczpjZW50ZXI7anVzdGlmeS1jb250ZW50OnNwYWNlLWJldHdlZW47Z2FwOjEwcHg7bWFyZ2luLWJvdHRvbTo5cHh9CiNwaGFzZUdyaWR7ZGlzcGxheTpncmlkO2dyaWQtdGVtcGxhdGUtY29sdW1uczpyZXBlYXQoYXV0by1maWxsLG1pbm1heCgxMTBweCwxZnIpKTtnYXA6OHB4fQoucGhhc2VJdGVte2JhY2tncm91bmQ6IzExMTcyMDtwYWRkaW5nOjhweDtib3JkZXItcmFkaXVzOjEwcHh9Ci5waGFzZUl0ZW0gbGFiZWx7ZGlzcGxheTpibG9jazttYXJnaW4tYm90dG9tOjVweH0KLnBoYXNlSXRlbSBpbnB1dHt3aWR0aDoxMDAlfQoudG9hc3R7cG9zaXRpb246Zml4ZWQ7bGVmdDo1MCU7Ym90dG9tOjIwcHg7dHJhbnNmb3JtOnRyYW5zbGF0ZVgoLTUwJSk7YmFja2dyb3VuZDojZThlZWY2O2NvbG9yOiMxMDE1MWQ7cGFkZGluZzoxMHB4IDE1cHg7Ym9yZGVyLXJhZGl1czo5OTlweDtvcGFjaXR5OjA7cG9pbnRlci1ldmVudHM6bm9uZTt0cmFuc2l0aW9uOi4yc30KLnRvYXN0LnNob3d7b3BhY2l0eToxfQpAbWVkaWEobWF4LXdpZHRoOjY1MHB4KXsuYXBwe3BhZGRpbmc6MTBweH0uY2FyZHtwYWRkaW5nOjExcHh9LmNvbnRyb2x7bWluLXdpZHRoOjEwNXB4fX0KPC9zdHlsZT4KPC9oZWFkPgo8Ym9keT4KPGRpdiBjbGFzcz0iYXBwIj4KICA8ZGl2IGlkPSJ2b2ljZU5hbWVCYXIiIHJvbGU9ImJ1dHRvbiIgdGFiaW5kZXg9IjAiIGFyaWEtbGFiZWw9IuODnOOCpOOCueWQjeOCkue3qOmbhiIgdGl0bGU9IuOCv+ODg+ODl+OBl+OBpuODnOOCpOOCueWQjeOCkue3qOmbhiI+VW50aXRsZWQgVm9pY2U8L2Rpdj4KICA8ZGl2IGNsYXNzPSJjYXJkIj4KICAgIDxkaXYgY2xhc3M9InRlbXBsYXRlLWhlYWRpbmciPgogICAgICA8c3Ryb25nPuODhuODs+ODl+ODrOODvOODiOeUn+aIkDwvc3Ryb25nPgogICAgICA8ZGl2IGNsYXNzPSJ2b2ljZS10YWJzIiByb2xlPSJ0YWJsaXN0IiBhcmlhLWxhYmVsPSLlo7Djga7jgr/jgqTjg5ciPgogICAgICAgIDxidXR0b24gdHlwZT0iYnV0dG9uIiBjbGFzcz0idm9pY2UtdGFiIGFjdGl2ZSIgZGF0YS12b2ljZT0ibWFsZSIgcm9sZT0idGFiIiBhcmlhLXNlbGVjdGVkPSJ0cnVlIj7nlLflo7A8L2J1dHRvbj4KICAgICAgICA8YnV0dG9uIHR5cGU9ImJ1dHRvbiIgY2xhc3M9InZvaWNlLXRhYiIgZGF0YS12b2ljZT0iZmVtYWxlIiByb2xlPSJ0YWIiIGFyaWEtc2VsZWN0ZWQ9ImZhbHNlIj7lpbPlo7A8L2J1dHRvbj4KICAgICAgPC9kaXY+CiAgICA8L2Rpdj4KICAgIDxkaXYgY2xhc3M9InRlbXBsYXRlLXZvd2VscyIgYXJpYS1sYWJlbD0i5q+N6Z+z44OG44Oz44OX44Os44O844OIIj4KICAgICAgPGJ1dHRvbiB0eXBlPSJidXR0b24iIGRhdGEtdGVtcGxhdGUtdm93ZWw9ImEiPuOBgjwvYnV0dG9uPgogICAgICA8YnV0dG9uIHR5cGU9ImJ1dHRvbiIgZGF0YS10ZW1wbGF0ZS12b3dlbD0iaSI+44GEPC9idXR0b24+CiAgICAgIDxidXR0b24gdHlwZT0iYnV0dG9uIiBkYXRhLXRlbXBsYXRlLXZvd2VsPSJ1Ij7jgYY8L2J1dHRvbj4KICAgICAgPGJ1dHRvbiB0eXBlPSJidXR0b24iIGRhdGEtdGVtcGxhdGUtdm93ZWw9ImUiPuOBiDwvYnV0dG9uPgogICAgICA8YnV0dG9uIHR5cGU9ImJ1dHRvbiIgZGF0YS10ZW1wbGF0ZS12b3dlbD0ibyI+44GKPC9idXR0b24+CiAgICA8L2Rpdj4KCiAgICA8ZGl2IGNsYXNzPSJyb3d0aXRsZSI+CiAgICAgIDxzdHJvbmc+5YCN6Z+z44K544Oa44Kv44OI44OrPC9zdHJvbmc+CiAgICAgIDxkaXYgY2xhc3M9InNwZWN0cnVtLXRvb2xzIj4KICAgICAgICA8YnV0dG9uIHR5cGU9ImJ1dHRvbiIgaWQ9InVuZG9CdG4iIGRpc2FibGVkIGFyaWEtbGFiZWw9IuOCueODmuOCr+ODiOODq+e3qOmbhuOCkuWFg+OBq+aIu+OBmSI+4oa2PC9idXR0b24+CiAgICAgICAgPGJ1dHRvbiB0eXBlPSJidXR0b24iIGlkPSJyZWRvQnRuIiBkaXNhYmxlZCBhcmlhLWxhYmVsPSLjgrnjg5rjgq/jg4jjg6vnt6jpm4bjgpLjgoTjgornm7TjgZkiPuKGtzwvYnV0dG9uPgogICAgICAgIDxsYWJlbCBjbGFzcz0iaW5saW5lLXNlbGVjdCI+6KGo56S65YCN6Z+zCiAgICAgICAgICA8c2VsZWN0IGlkPSJ2aXNpYmxlQ291bnQiIGFyaWEtbGFiZWw9IuihqOekuuWAjemfsyI+PG9wdGlvbj4xNjwvb3B0aW9uPjxvcHRpb24+MzI8L29wdGlvbj48b3B0aW9uIHNlbGVjdGVkPjY0PC9vcHRpb24+PG9wdGlvbj4xMjg8L29wdGlvbj48b3B0aW9uPjI1Njwvb3B0aW9uPjwvc2VsZWN0PgogICAgICAgIDwvbGFiZWw+CiAgICAgIDwvZGl2PgogICAgPC9kaXY+CiAgICA8ZGl2IGNsYXNzPSJzcGVjdHJ1bS1lZGl0b3IiPgogICAgICA8ZGl2IGNsYXNzPSJ2b3dlbC10YWJzIiByb2xlPSJ0YWJsaXN0IiBhcmlhLWxhYmVsPSLjgrnjg5rjgq/jg4jjg6vjga7mr43pn7MiPgogICAgICAgIDxidXR0b24gdHlwZT0iYnV0dG9uIiBjbGFzcz0idm93ZWwtdGFiIGFjdGl2ZSIgZGF0YS12b3dlbD0iYSIgcm9sZT0idGFiIiBhcmlhLXNlbGVjdGVkPSJ0cnVlIj7jgYI8L2J1dHRvbj4KICAgICAgICA8YnV0dG9uIHR5cGU9ImJ1dHRvbiIgY2xhc3M9InZvd2VsLXRhYiIgZGF0YS12b3dlbD0iaSIgcm9sZT0idGFiIiBhcmlhLXNlbGVjdGVkPSJmYWxzZSI+44GEPC9idXR0b24+CiAgICAgICAgPGJ1dHRvbiB0eXBlPSJidXR0b24iIGNsYXNzPSJ2b3dlbC10YWIiIGRhdGEtdm93ZWw9InUiIHJvbGU9InRhYiIgYXJpYS1zZWxlY3RlZD0iZmFsc2UiPuOBhjwvYnV0dG9uPgogICAgICAgIDxidXR0b24gdHlwZT0iYnV0dG9uIiBjbGFzcz0idm93ZWwtdGFiIiBkYXRhLXZvd2VsPSJlIiByb2xlPSJ0YWIiIGFyaWEtc2VsZWN0ZWQ9ImZhbHNlIj7jgYg8L2J1dHRvbj4KICAgICAgICA8YnV0dG9uIHR5cGU9ImJ1dHRvbiIgY2xhc3M9InZvd2VsLXRhYiIgZGF0YS12b3dlbD0ibyIgcm9sZT0idGFiIiBhcmlhLXNlbGVjdGVkPSJmYWxzZSI+44GKPC9idXR0b24+CiAgICAgIDwvZGl2PgogICAgICA8Y2FudmFzIGlkPSJzcGVjdHJ1bSI+PC9jYW52YXM+CiAgICA8L2Rpdj4KICAgIDxkaXYgY2xhc3M9ImdhaW4tY29udHJvbCIgYXJpYS1sYWJlbD0i5q+N6Z+z44GU44Go44Gu44Ky44Kk44OzIj4KICAgICAgPGxhYmVsIGZvcj0idm93ZWxHYWluU2xpZGVyIj7mr43pn7PjgrLjgqTjg7PvvIg8c3BhbiBpZD0idm93ZWxHYWluTmFtZSI+44GCPC9zcGFuPu+8iTwvbGFiZWw+CiAgICAgIDxpbnB1dCBpZD0idm93ZWxHYWluU2xpZGVyIiB0eXBlPSJyYW5nZSIgbWluPSIwIiBtYXg9IjgwMCIgc3RlcD0iMTAiIHZhbHVlPSIxMDAiIGFyaWEtbGFiZWw9IumBuOaKnuS4reOBruavjemfs+OBruOCsuOCpOODs++8iDDjgJw4MDAl77yJIj4KICAgICAgPHN0cm9uZyBpZD0idm93ZWxHYWluVmFsdWUiPjEwMCU8L3N0cm9uZz4KICAgIDwvZGl2PgogICAgPGRpdiBjbGFzcz0iZ2Fpbi1jb250cm9sIiBhcmlhLWxhYmVsPSLlhajmr43pn7Pjga7lh7rlipvjgrLjgqTjg7MiPgogICAgICA8bGFiZWwgZm9yPSJ2b2ljZUdhaW5TbGlkZXIiPuWFqOS9k+OCsuOCpOODszwvbGFiZWw+CiAgICAgIDxpbnB1dCBpZD0idm9pY2VHYWluU2xpZGVyIiB0eXBlPSJyYW5nZSIgbWluPSIwIiBtYXg9IjgwMCIgc3RlcD0iMTAiIHZhbHVlPSIxMDAiIGFyaWEtbGFiZWw9IuWFqOavjemfs+OBruWHuuWKm+OCsuOCpOODs++8iDDjgJw4MDAl77yJIj4KICAgICAgPHN0cm9uZyBpZD0idm9pY2VHYWluVmFsdWUiPjEwMCU8L3N0cm9uZz4KICAgICAgPHAgY2xhc3M9Im5vdGUiPuS4iuOBr+mBuOaKnuS4reOBruavjemfs+OBoOOBkeOAgeS4i+OBr+WFqOavjemfs+OBq+mBqeeUqOOAguWkp+OBjeOBj+OBl+OBmeOBjuOCi+OBqOmfs+OBjOatquOCgOOBk+OBqOOBjOOBguOCiuOBvuOBmeOAgjwvcD4KICAgIDwvZGl2PgogICAgPGRpdiBjbGFzcz0icHJldmlldy1pbmxpbmUiIGFyaWEtbGFiZWw9IuODl+ODrOODk+ODpeODvCI+CiAgICAgIDxkaXYgY2xhc3M9InByZXZpZXctbm90ZXMiPgogICAgICAgIDxidXR0b24gdHlwZT0iYnV0dG9uIiBpZD0ib2N0YXZlRG93biIgY2xhc3M9Im9jdGF2ZS1idG4iIGFyaWEtbGFiZWw9IjHjgqrjgq/jgr/jg7zjg5bkuIvjgZLjgosiPuKXgDwvYnV0dG9uPgogICAgICAgIDxidXR0b24gZGF0YS1ub3RlPSIyNjEuNjI1NTY1IiBkYXRhLW5vdGUtbmFtZT0iQyIgZGF0YS1iYXNlLW9jdGF2ZT0iNCI+QzQ8L2J1dHRvbj48YnV0dG9uIGRhdGEtbm90ZT0iMjkzLjY2NDc2OCIgZGF0YS1ub3RlLW5hbWU9IkQiIGRhdGEtYmFzZS1vY3RhdmU9IjQiPkQ0PC9idXR0b24+CiAgICAgICAgPGJ1dHRvbiBkYXRhLW5vdGU9IjMyOS42Mjc1NTciIGRhdGEtbm90ZS1uYW1lPSJFIiBkYXRhLWJhc2Utb2N0YXZlPSI0Ij5FNDwvYnV0dG9uPjxidXR0b24gZGF0YS1ub3RlPSIzNDkuMjI4MjMxIiBkYXRhLW5vdGUtbmFtZT0iRiIgZGF0YS1iYXNlLW9jdGF2ZT0iNCI+RjQ8L2J1dHRvbj4KICAgICAgICA8YnV0dG9uIGRhdGEtbm90ZT0iMzkxLjk5NTQzNiIgZGF0YS1ub3RlLW5hbWU9IkciIGRhdGEtYmFzZS1vY3RhdmU9IjQiPkc0PC9idXR0b24+PGJ1dHRvbiBkYXRhLW5vdGU9IjQ0MCIgZGF0YS1ub3RlLW5hbWU9IkEiIGRhdGEtYmFzZS1vY3RhdmU9IjQiPkE0PC9idXR0b24+CiAgICAgICAgPGJ1dHRvbiBkYXRhLW5vdGU9IjQ5My44ODMzMDEiIGRhdGEtbm90ZS1uYW1lPSJCIiBkYXRhLWJhc2Utb2N0YXZlPSI0Ij5CNDwvYnV0dG9uPjxidXR0b24gZGF0YS1ub3RlPSI1MjMuMjUxMTMxIiBkYXRhLW5vdGUtbmFtZT0iQyIgZGF0YS1iYXNlLW9jdGF2ZT0iNSI+QzU8L2J1dHRvbj4KICAgICAgICA8YnV0dG9uIHR5cGU9ImJ1dHRvbiIgaWQ9Im9jdGF2ZVVwIiBjbGFzcz0ib2N0YXZlLWJ0biIgYXJpYS1sYWJlbD0iMeOCquOCr+OCv+ODvOODluS4iuOBkuOCiyI+4pa2PC9idXR0b24+CiAgICAgIDwvZGl2PgogICAgICA8ZGl2IGNsYXNzPSJwcmV2aWV3LWFjdGlvbnMiPgogICAgICAgIDxidXR0b24gaWQ9ImFQcmV2aWV3IiBjbGFzcz0icHJpbWFyeSI+8J+UijwvYnV0dG9uPgogICAgICAgIDxidXR0b24gaWQ9InN0b3BQcmV2aWV3Ij7lgZzmraI8L2J1dHRvbj4KICAgICAgPC9kaXY+CiAgICA8L2Rpdj4KICAgIDxkaXYgY2xhc3M9ImZvb3Rlci1hY3Rpb25zIj4KICAgICAgPGJ1dHRvbiBpZD0icmVzZXRCdG4iPuODquOCu+ODg+ODiDwvYnV0dG9uPgogICAgICA8YnV0dG9uIGlkPSJzYXZlQnRuIj4udm9pY2Ug5L+d5a2YPC9idXR0b24+CiAgICAgIDxidXR0b24gaWQ9ImxvYWRCdG4iPi52b2ljZSDoqq3ovrw8L2J1dHRvbj4KICAgICAgPGlucHV0IGlkPSJmaWxlSW5wdXQiIHR5cGU9ImZpbGUiIGFjY2VwdD0iLnZvaWNlLC5qc29uLGFwcGxpY2F0aW9uL2pzb24iIGhpZGRlbj4KICAgIDwvZGl2PgogIDwvZGl2PgoKICA8ZGl2IGNsYXNzPSJjYXJkIj4KICAgIDxkaXYgY2xhc3M9InJvd3RpdGxlIj48c3Ryb25nPuazouW9ojwvc3Ryb25nPjxzcGFuIGNsYXNzPSJwaWxsIj7nj77lnKjjga7ln7rpn7Mx5ZGo5pyfPC9zcGFuPjwvZGl2PgogICAgPGNhbnZhcyBpZD0id2F2ZSI+PC9jYW52YXM+CiAgPC9kaXY+CgogIDxkaXYgY2xhc3M9ImNhcmQiPgogICAgPGRpdiBjbGFzcz0icm93dGl0bGUiPjxzdHJvbmc+5L2N55u477yI5LiK57Sa6ICF5ZCR44GR77yJPC9zdHJvbmc+PGJ1dHRvbiBpZD0icGhhc2VUb2dnbGUiPuihqOekujwvYnV0dG9uPjwvZGl2PgogICAgPGRpdiBpZD0icGhhc2VBcmVhIiBoaWRkZW4+CiAgICAgIDxwIGNsYXNzPSJub3RlIj7pgJrluLjjga/jgIzmqJnmupbjgI3jgadPS+OAguWQhOWAjemfs+OBruS9jeebuOOCkuW6puaVsOOBp+WkieabtOOBp+OBjeOBvuOBmeOAgnYx44Gn44Gv5L2N55u444Gv6Z+z6YeP44Go44Gv54us56uL44GX44Gf5LiK57Sa6Kit5a6a44Go44GX44Gm5L+d5a2Y44GX44G+44GZ44CCPC9wPgogICAgICA8ZGl2IGNsYXNzPSJhZHZhbmNlZCI+CiAgICAgICAgPGJ1dHRvbiBpZD0icGhhc2VaZXJvIj7lhajlgI3pn7PjgpIwwrA8L2J1dHRvbj4KICAgICAgICA8YnV0dG9uIGlkPSJwaGFzZVJhbmRvbSI+44Op44Oz44OA44Og5L2N55u4PC9idXR0b24+CiAgICAgIDwvZGl2PgogICAgICA8ZGl2IGlkPSJwaGFzZUdyaWQiPjwvZGl2PgogICAgPC9kaXY+CiAgPC9kaXY+CjwvZGl2Pgo8ZGl2IGlkPSJ0b2FzdCIgY2xhc3M9InRvYXN0Ij48L2Rpdj4KCjxzY3JpcHQ+CmNvbnN0IE1BWF9IQVJNT05JQ1M9MjU2Owpjb25zdCBWT1dFTFM9ewogIGE6e0YxOjgwMCxGMjoxMjAwLEYzOjI2MDB9LAogIGk6e0YxOjMwMCxGMjoyNTAwLEYzOjMwMDB9LAogIHU6e0YxOjM1MCxGMjoxNTAwLEYzOjI1MDB9LAogIGU6e0YxOjUwMCxGMjoyMDAwLEYzOjI4MDB9LAogIG86e0YxOjUwMCxGMjoxMDAwLEYzOjI1MDB9Cn07CmNvbnN0IHN0YXRlPXsKICBmb3JtYXQ6InVyb2NoaS12b2ljZSIsdmVyc2lvbjoxLG5hbWU6IlVudGl0bGVkIFZvaWNlIiwKICB2b2ljZVR5cGU6Im1hbGUiLGZ1bmRhbWVudGFsOjEzMCxjdXJyZW50Vm93ZWw6ImEiLG91dHB1dEdhaW46MSx2b3dlbEdhaW5zOnthOjEsaToxLHU6MSxlOjEsbzoxfSwKICBoYXJtb25pY3M6QXJyYXkoTUFYX0hBUk1PTklDUykuZmlsbCgwKSwKICBwaGFzZXM6QXJyYXkoTUFYX0hBUk1PTklDUykuZmlsbCgwKSwKICB2b3dlbHM6e2E6bnVsbCxpOm51bGwsdTpudWxsLGU6bnVsbCxvOm51bGx9LAogIHBoYXNlUHJlc2V0OiJ6ZXJvIgp9OwpzdGF0ZS5oYXJtb25pY3NbMF09MTsKZnVuY3Rpb24gc2VsZWN0ZWRWb3dlbEdhaW4oKXtyZXR1cm4gTWF0aC5tYXgoMCxNYXRoLm1pbig4LE51bWJlcihzdGF0ZS52b3dlbEdhaW5zPy5bc3RhdGUuY3VycmVudFZvd2VsXT8/MSkpKTt9CmZ1bmN0aW9uIGNvbWJpbmVkUHJldmlld0dhaW4oKXtyZXR1cm4gLjEyKk1hdGgubWF4KDAsTWF0aC5taW4oOCxOdW1iZXIoc3RhdGUub3V0cHV0R2Fpbj8/MSkpKSpzZWxlY3RlZFZvd2VsR2FpbigpO30KCmNvbnN0IHNwZWN0cnVtPWRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJzcGVjdHJ1bSIpLCBzY3R4PXNwZWN0cnVtLmdldENvbnRleHQoIjJkIik7CmNvbnN0IHdhdmU9ZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoIndhdmUiKSwgd2N0eD13YXZlLmdldENvbnRleHQoIjJkIik7CmxldCBhdWRpb0N0eD1udWxsLCBvc2M9bnVsbCwgZ2Fpbj1udWxsLCBwcmV2aWV3VGltZXI9bnVsbCwgZHJhZ2dpbmc9ZmFsc2UsIHByZXZpZXdQbGF5aW5nPWZhbHNlOwpjb25zdCB1bmRvSGlzdG9yeT1bXSwgcmVkb0hpc3Rvcnk9W107CmxldCBkcmFnU3RhcnRTbmFwc2hvdD1udWxsOwpjb25zdCBISVNUT1JZX0xJTUlUPTEwMDsKCmZ1bmN0aW9uIHJlc2l6ZUNhbnZhcyhjKXsKICBjb25zdCByPWMuZ2V0Qm91bmRpbmdDbGllbnRSZWN0KCksIGQ9d2luZG93LmRldmljZVBpeGVsUmF0aW98fDE7CiAgY29uc3QgbmV4dFdpZHRoPU1hdGgubWF4KDEsTWF0aC5mbG9vcihyLndpZHRoKmQpKTsKICBjb25zdCBuZXh0SGVpZ2h0PU1hdGgubWF4KDEsTWF0aC5mbG9vcihyLmhlaWdodCpkKSk7CiAgaWYoYy53aWR0aCE9PW5leHRXaWR0aCkgYy53aWR0aD1uZXh0V2lkdGg7CiAgaWYoYy5oZWlnaHQhPT1uZXh0SGVpZ2h0KSBjLmhlaWdodD1uZXh0SGVpZ2h0OwogIGMuX2Q9ZDsKfQpmdW5jdGlvbiB0b2FzdCh0KXtjb25zdCBlPWRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJ0b2FzdCIpO2UudGV4dENvbnRlbnQ9dDtlLmNsYXNzTGlzdC5hZGQoInNob3ciKTtzZXRUaW1lb3V0KCgpPT5lLmNsYXNzTGlzdC5yZW1vdmUoInNob3ciKSwxNDAwKX0KZnVuY3Rpb24gY29tbWl0Vm9pY2VOYW1lKHZhbHVlKXsKICBjb25zdCBuYW1lPSh2YWx1ZXx8IiIpLnRyaW0oKS5zbGljZSgwLDEwMCl8fCJVbnRpdGxlZCBWb2ljZSI7CiAgc3RhdGUubmFtZT1uYW1lOwogIGNvbnN0IGJhcj1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgidm9pY2VOYW1lQmFyIik7CiAgYmFyLnRleHRDb250ZW50PW5hbWU7CiAgYmFyLnNldEF0dHJpYnV0ZSgiYXJpYS1sYWJlbCIsYOODnOOCpOOCueWQje+8miR7bmFtZX3jgILjgr/jg4Pjg5fjgZfjgabnt6jpm4ZgKTsKfQpmdW5jdGlvbiBlZGl0Vm9pY2VOYW1lKCl7CiAgY29uc3QgYmFyPWRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJ2b2ljZU5hbWVCYXIiKTsKICBpZihiYXIucXVlcnlTZWxlY3RvcigiaW5wdXQiKSlyZXR1cm47CiAgY29uc3QgaW5wdXQ9ZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgiaW5wdXQiKTtpbnB1dC5pZD0idm9pY2VOYW1lSW5wdXQiO2lucHV0LnR5cGU9InRleHQiO2lucHV0Lm1heExlbmd0aD0xMDA7aW5wdXQudmFsdWU9c3RhdGUubmFtZXx8IlVudGl0bGVkIFZvaWNlIjtpbnB1dC5zZXRBdHRyaWJ1dGUoImFyaWEtbGFiZWwiLCLjg5zjgqTjgrnlkI0iKTsKICBiYXIudGV4dENvbnRlbnQ9IiI7YmFyLmFwcGVuZENoaWxkKGlucHV0KTtpbnB1dC5mb2N1cygpO2lucHV0LnNlbGVjdCgpOwogIGxldCBmaW5pc2hlZD1mYWxzZTsKICBjb25zdCBmaW5pc2g9KCk9PntpZihmaW5pc2hlZClyZXR1cm47ZmluaXNoZWQ9dHJ1ZTtjb21taXRWb2ljZU5hbWUoaW5wdXQudmFsdWUpfTsKICBpbnB1dC5hZGRFdmVudExpc3RlbmVyKCJibHVyIixmaW5pc2gpOwogIGlucHV0LmFkZEV2ZW50TGlzdGVuZXIoImtleWRvd24iLGU9PntpZihlLmtleT09PSJFbnRlciIpe2UucHJldmVudERlZmF1bHQoKTtpbnB1dC5ibHVyKCl9ZWxzZSBpZihlLmtleT09PSJFc2NhcGUiKXtpbnB1dC52YWx1ZT1zdGF0ZS5uYW1lfHwiVW50aXRsZWQgVm9pY2UiO2lucHV0LmJsdXIoKX19KTsKfQpjb25zdCB2b2ljZU5hbWVCYXI9ZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInZvaWNlTmFtZUJhciIpOwp2b2ljZU5hbWVCYXIuYWRkRXZlbnRMaXN0ZW5lcigiY2xpY2siLGVkaXRWb2ljZU5hbWUpOwp2b2ljZU5hbWVCYXIuYWRkRXZlbnRMaXN0ZW5lcigia2V5ZG93biIsZT0+e2lmKGUua2V5PT09IkVudGVyInx8ZS5rZXk9PT0iICIpe2UucHJldmVudERlZmF1bHQoKTtlZGl0Vm9pY2VOYW1lKCl9fSk7CgpmdW5jdGlvbiBjdXJyZW50QXJyYXkoKXsKICAvLyDmnKrnlJ/miJDjga7mr43pn7Pjga/jgIHnm7TliY3jgavpgbjjgpPjgafjgYTjgZ/mr43pn7Pjga7jg4fjg7zjgr/jgpLmtYHnlKjjgZvjgZrjgIHnqbrjga7jgrnjg5rjgq/jg4jjg6vjgajjgZfjgabmibHjgYbjgIIKICByZXR1cm4gc3RhdGUudm93ZWxzW3N0YXRlLmN1cnJlbnRWb3dlbF0gfHwgQXJyYXkoTUFYX0hBUk1PTklDUykuZmlsbCgwKTsKfQoKZnVuY3Rpb24gY2xvbmUoYSl7cmV0dXJuIEFycmF5LmZyb20oYSk7fQpmdW5jdGlvbiBzbmFwc2hvdFN0YXRlKCl7CiAgcmV0dXJuIHtoYXJtb25pY3M6Y2xvbmUoc3RhdGUuaGFybW9uaWNzKSx2b3dlbHM6T2JqZWN0LmZyb21FbnRyaWVzKE9iamVjdC5lbnRyaWVzKHN0YXRlLnZvd2VscykubWFwKChbayx2XSk9PltrLHY/Y2xvbmUodik6bnVsbF0pKSxjdXJyZW50Vm93ZWw6c3RhdGUuY3VycmVudFZvd2VsfTsKfQpmdW5jdGlvbiByZXN0b3JlU25hcHNob3Qocyl7CiAgc3RhdGUuaGFybW9uaWNzPWNsb25lKHMuaGFybW9uaWNzKTsKICBzdGF0ZS52b3dlbHM9T2JqZWN0LmZyb21FbnRyaWVzKE9iamVjdC5lbnRyaWVzKHMudm93ZWxzKS5tYXAoKFtrLHZdKT0+W2ssdj9jbG9uZSh2KTpudWxsXSkpOwogIHN0YXRlLmN1cnJlbnRWb3dlbD1zLmN1cnJlbnRWb3dlbDsKICBzZXRWb3dlbFRhYnMoc3RhdGUuY3VycmVudFZvd2VsKTtyZW5kZXIoKTt1cGRhdGVBdWRpbygpO3VwZGF0ZUhpc3RvcnlCdXR0b25zKCk7Cn0KZnVuY3Rpb24gdXBkYXRlSGlzdG9yeUJ1dHRvbnMoKXsKICBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgndW5kb0J0bicpLmRpc2FibGVkPXVuZG9IaXN0b3J5Lmxlbmd0aD09PTA7CiAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ3JlZG9CdG4nKS5kaXNhYmxlZD1yZWRvSGlzdG9yeS5sZW5ndGg9PT0wOwp9CmZ1bmN0aW9uIGNsZWFySGlzdG9yeSgpe3VuZG9IaXN0b3J5Lmxlbmd0aD0wO3JlZG9IaXN0b3J5Lmxlbmd0aD0wO2RyYWdTdGFydFNuYXBzaG90PW51bGw7dXBkYXRlSGlzdG9yeUJ1dHRvbnMoKX0KZnVuY3Rpb24gcHVzaFVuZG9TbmFwc2hvdChzKXsKICB1bmRvSGlzdG9yeS5wdXNoKHMpO2lmKHVuZG9IaXN0b3J5Lmxlbmd0aD5ISVNUT1JZX0xJTUlUKXVuZG9IaXN0b3J5LnNoaWZ0KCk7CiAgcmVkb0hpc3RvcnkubGVuZ3RoPTA7dXBkYXRlSGlzdG9yeUJ1dHRvbnMoKTsKfQoKZnVuY3Rpb24gc3BlY3RyYWxFbnZlbG9wZShmcmVxLCB0eXBlLCB2b3dlbCl7CiAgY29uc3Qgdj1WT1dFTFNbdm93ZWxdLCBzY2FsZT10eXBlPT09ImZlbWFsZSI/MS4xMjoxLjA7CiAgY29uc3QgZjE9di5GMSpzY2FsZSxmMj12LkYyKnNjYWxlLGYzPXYuRjMqc2NhbGU7CiAgY29uc3Qgb3V0PVtdOwogIGZvcihsZXQgbj0xO248PU1BWF9IQVJNT05JQ1M7bisrKXsKICAgIGNvbnN0IGY9c3RhdGUuZnVuZGFtZW50YWwqbjsKICAgIC8vIOOAjOOBhOOAjeOAjOOBhuOAjeOBr+Wfuumfs+OBq+WvvuOBmeOCi+aVtOaVsOWAjemfs+OBruavlOeOh+OCkumrmOOCgeOAgQogICAgLy8g5Z+66Z+z5LuY6L+R44GL44KJ6auY5qyh5YCN6Z+z44G+44Gn44Gu5ZGo5pyf5oCn44KS5L+d44Gh44KE44GZ44GP44GZ44KL44CCCiAgICBjb25zdCB2b3dlbEhhcm1vbmljQm9vc3QgPSAodm93ZWw9PT0iaSIgfHwgdm93ZWw9PT0idSIpCiAgICAgID8gKDAuNzIgKyAwLjI4IC8gTWF0aC5wb3cobiwgMC4xOCkpCiAgICAgIDogMS4wOwogICAgLy8gR2VudGxlIGdsb3R0YWwgc3BlY3RyYWwgdGlsdCBwbHVzIHRocmVlIGJyb2FkIGZvcm1hbnQgcGVha3MuCiAgICBjb25zdCB0aWx0PTEvTWF0aC5wb3cobiwwLjcyKTsKICAgIGNvbnN0IGc9KGZjLGJ3LGFtcCk9PmFtcCpNYXRoLmV4cCgtMC41Kk1hdGgucG93KChmLWZjKS9idywyKSk7CiAgICBsZXQgeD0wLjA0NSArIHRpbHQqKDEuMCArIGcoZjEsMTMwLDIuNikrZyhmMiwyMTAsMi4xKStnKGYzLDMwMCwwLjgpKTsKICAgIHggKj0gdm93ZWxIYXJtb25pY0Jvb3N0OwogICAgb3V0LnB1c2goeCk7CiAgfQogIC8vIOavjemfs+OBlOOBqOOBruOCueODmuOCr+ODiOODq+OCqOODjeODq+OCruODvO+8iOWQhOWAjemfs+aMr+W5heOBruS6jOS5l+WSjO+8ieOCkjHjgavjgZ3jgo3jgYjjgovjgIIKICAvLyDmnIDlpKfjg5Djg7zjgafjga/jgarjgY/lhajlgI3pn7Pjga7jgqjjg43jg6vjgq7jg7zjgpLln7rmupbjgavjgZnjgovjgZ/jgoHjgIHlgI3pn7Pjga7mnKzmlbDjgYzlsJHjgarjgYTmr43pn7PjgoIKICAvLyDml6LlrZjjga7lgI3pn7Pjga7nm7jlr77mr5TjgpLkv53jgaHjgarjgYzjgonjgIHlhajkvZPjga7jgqjjg43jg6vjgq7jg7zjgpLlkIjjgo/jgZvjgonjgozjgovjgIIKICBjb25zdCBlbmVyZ3k9TWF0aC5zcXJ0KG91dC5yZWR1Y2UoKHN1bSx4KT0+c3VtK3gqeCwwKSkgfHwgMTsKICByZXR1cm4gb3V0Lm1hcCh4PT5NYXRoLm1heCgwLHgvZW5lcmd5KSk7Cn0KCmZ1bmN0aW9uIGdlbmVyYXRlVm93ZWwodil7CiAgY29uc3Qgb2xkPXN0YXRlLmN1cnJlbnRWb3dlbDsgc3RhdGUuY3VycmVudFZvd2VsPXY7CiAgY29uc3QgYXJyPXNwZWN0cmFsRW52ZWxvcGUoc3RhdGUuZnVuZGFtZW50YWwsc3RhdGUudm9pY2VUeXBlLHYpOwogIHN0YXRlLnZvd2Vsc1t2XT1hcnI7CiAgaWYodj09PSJhIikgc3RhdGUuaGFybW9uaWNzPWNsb25lKGFycik7CiAgc3RhdGUuY3VycmVudFZvd2VsPW9sZDsKICByZW5kZXIoKTsKfQpmdW5jdGlvbiBnZW5lcmF0ZUFsbCgpewogIGZvcihjb25zdCB2IG9mIE9iamVjdC5rZXlzKFZPV0VMUykpIHN0YXRlLnZvd2Vsc1t2XT1zcGVjdHJhbEVudmVsb3BlKHN0YXRlLmZ1bmRhbWVudGFsLHN0YXRlLnZvaWNlVHlwZSx2KTsKICBzdGF0ZS5oYXJtb25pY3M9Y2xvbmUoc3RhdGUudm93ZWxzW3N0YXRlLmN1cnJlbnRWb3dlbF18fHN0YXRlLnZvd2Vscy5hKTsKICByZW5kZXIoKTsgdXBkYXRlQXVkaW8oKTsgdG9hc3QoIjXmr43pn7PjgpLnlJ/miJDjgZfjgb7jgZfjgZ8iKTsKfQoKZnVuY3Rpb24gbWFrZVBlcmlvZGljV2F2ZSgpewogIGlmKCFhdWRpb0N0eCkgcmV0dXJuIG51bGw7CiAgY29uc3QgYT1jdXJyZW50QXJyYXkoKTsKICAvLyDlho3nlJ/mmYLjgaDjgZHjgIHnj77lnKjjga7mr43pn7Pjga7lgI3pn7PmjK/luYXjgpLjgqjjg43jg6vjgq7jg7zvvIjkuozkuZflkozvvIkx44Gr5q2j6KaP5YyW44GZ44KL44CCCiAgLy8g5YWD44OH44O844K/44KE44K544Oa44Kv44OI44Or6KGo56S644Gv5aSJ5pu044Gb44Ga44CB44GC44Cc44GK44Gu5YaN55Sf6Z+z6YeP44OQ44Op44Oz44K544Gg44GR44KS44Gd44KN44GI44KL44CCCiAgY29uc3QgZW5lcmd5PU1hdGguc3FydChhLnJlZHVjZSgoc3VtLHgpPT5zdW0rKE51bWJlci5pc0Zpbml0ZSh4KT94Kng6MCksMCkpOwogIGNvbnN0IHBsYXliYWNrU2NhbGU9ZW5lcmd5PjFlLTEyID8gMS9lbmVyZ3kgOiAxOwogIGNvbnN0IHJlYWw9bmV3IEZsb2F0MzJBcnJheShNQVhfSEFSTU9OSUNTKzEpOwogIGNvbnN0IGltYWc9bmV3IEZsb2F0MzJBcnJheShNQVhfSEFSTU9OSUNTKzEpOwogIGZvcihsZXQgbj0xO248PU1BWF9IQVJNT05JQ1M7bisrKXsKICAgIGNvbnN0IGFtcD0oYVtuLTFdPz8wKSpwbGF5YmFja1NjYWxlOwogICAgY29uc3QgcGg9KHN0YXRlLnBoYXNlc1tuLTFdfHwwKSpNYXRoLlBJLzE4MDsKICAgIHJlYWxbbl09YW1wKk1hdGguc2luKHBoKTsKICAgIGltYWdbbl09YW1wKk1hdGguY29zKHBoKTsKICB9CiAgcmV0dXJuIGF1ZGlvQ3R4LmNyZWF0ZVBlcmlvZGljV2F2ZShyZWFsLGltYWcse2Rpc2FibGVOb3JtYWxpemF0aW9uOnRydWV9KTsKfQphc3luYyBmdW5jdGlvbiBlbnN1cmVBdWRpbygpewogIGlmKCFhdWRpb0N0eCl7CiAgICBhdWRpb0N0eD1uZXcgKHdpbmRvdy5BdWRpb0NvbnRleHR8fHdpbmRvdy53ZWJraXRBdWRpb0NvbnRleHQpKCk7CiAgICBvc2M9YXVkaW9DdHguY3JlYXRlT3NjaWxsYXRvcigpOyBnYWluPWF1ZGlvQ3R4LmNyZWF0ZUdhaW4oKTsKICAgIGdhaW4uZ2Fpbi52YWx1ZT0wLjEyKk1hdGgubWF4KDAsTWF0aC5taW4oOCxOdW1iZXIoc3RhdGUub3V0cHV0R2Fpbj8/MSkpKTsKICAgIG9zYy5jb25uZWN0KGdhaW4pLmNvbm5lY3QoYXVkaW9DdHguZGVzdGluYXRpb24pOwogICAgb3NjLmZyZXF1ZW5jeS52YWx1ZT1zdGF0ZS5mdW5kYW1lbnRhbDsKICAgIG9zYy5zZXRQZXJpb2RpY1dhdmUobWFrZVBlcmlvZGljV2F2ZSgpKTsKICAgIG9zYy5zdGFydCgpOwogIH0KICBpZihhdWRpb0N0eC5zdGF0ZT09PSJzdXNwZW5kZWQiKSBhd2FpdCBhdWRpb0N0eC5yZXN1bWUoKTsKfQphc3luYyBmdW5jdGlvbiB1cGRhdGVBdWRpbyhmcmVxPXN0YXRlLmZ1bmRhbWVudGFsKXsKICBpZighYXVkaW9DdHgpIHJldHVybjsKICBjb25zdCBub3c9YXVkaW9DdHguY3VycmVudFRpbWU7CiAgb3NjLnNldFBlcmlvZGljV2F2ZShtYWtlUGVyaW9kaWNXYXZlKCkpOwogIG9zYy5mcmVxdWVuY3kuY2FuY2VsU2NoZWR1bGVkVmFsdWVzKG5vdyk7CiAgb3NjLmZyZXF1ZW5jeS5zZXRUYXJnZXRBdFRpbWUoZnJlcSxub3csMC4wMTIpOwp9CmZ1bmN0aW9uIHNldEZyZXF1ZW5jeShmKXtzdGF0ZS5mdW5kYW1lbnRhbD1mO3VwZGF0ZUF1ZGlvKGYpO3JlbmRlcldhdmUoKX0KCmZ1bmN0aW9uIGRyYXdTcGVjdHJ1bSgpewogIHJlc2l6ZUNhbnZhcyhzcGVjdHJ1bSk7CiAgY29uc3QgZD1zcGVjdHJ1bS5fZCx3PXNwZWN0cnVtLndpZHRoLGg9c3BlY3RydW0uaGVpZ2h0OwogIHNjdHguY2xlYXJSZWN0KDAsMCx3LGgpOwogIHNjdHguZmlsbFN0eWxlPSIjMGMxMDE2IjtzY3R4LmZpbGxSZWN0KDAsMCx3LGgpOwogIGNvbnN0IGNvdW50PStkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgidmlzaWJsZUNvdW50IikudmFsdWUsIHNjYWxlPSJsaW5lYXIiOwogIGNvbnN0IGFycj1jdXJyZW50QXJyYXkoKTsKICAvLyDjgrnjg5rjgq/jg4jjg6vooajnpLrjga/jgIHmr43pn7PjgZTjgajjga7ln7rpn7PvvIgx5YCN6Z+z77yJ44KSMTAwJeOBq+WbuuWumuOBmeOCi+OAggogIC8vIOmfs+WjsOeUn+aIkOOBq+S9v+OBhuOCqOODjeODq+OCruODvOato+imj+WMlua4iOOBv+OBruaMr+W5heODh+ODvOOCv+iHquS9k+OBr+WkieabtOOBl+OBquOBhOOAggogIC8vIOacqueUn+aIkOOBruavjemfs+OBr+epuuihqOekuuOBruOBvuOBvuOAgue3qOmbhuOBp+WAjemfs+OCkui/veWKoOOBl+OBn+WgtOWQiOOBr+OAgeWfuumfs+OBjDDjgafjgoIKICAvLyDov73liqDjgZfjgZ/lgI3pn7Pjga7mjK/luYXjgpLjgZ3jga7jgb7jgb7ooajnpLrjgafjgY3jgovjgojjgYbjgavjgZnjgovjgIIKICBjb25zdCBkaXNwbGF5QmFzZT1NYXRoLmFicyhhcnJbMF18fDApPjFlLTkgPyBNYXRoLmFicyhhcnJbMF0pIDogMTsKICBjb25zdCBwYWQ9e2w6MzgscjoxMCx0OjEyLGI6Mjh9OwogIGNvbnN0IHBsb3RQYWQ9e2w6cGFkLmwqZCxyOnBhZC5yKmQsdDpwYWQudCpkLGI6cGFkLmIqZH07CiAgY29uc3QgcHc9dy1wbG90UGFkLmwtcGxvdFBhZC5yLCBwaD1oLXBsb3RQYWQudC1wbG90UGFkLmI7CiAgc2N0eC5zdHJva2VTdHlsZT0iIzI5MzM0NCI7c2N0eC5saW5lV2lkdGg9MSpkOwogIGZvcihsZXQgaT0wO2k8PTQ7aSsrKXtjb25zdCB5PXBsb3RQYWQudCtwaCppLzQ7c2N0eC5iZWdpblBhdGgoKTtzY3R4Lm1vdmVUbyhwbG90UGFkLmwseSk7c2N0eC5saW5lVG8ody1wbG90UGFkLnIseSk7c2N0eC5zdHJva2UoKX0KICBzY3R4LmZpbGxTdHlsZT0iIzhmOWJhZCI7c2N0eC5mb250PWAkezEyKmR9cHggc3lzdGVtLXVpYDsKICBmb3IobGV0IGk9MDtpPD00O2krKyl7bGV0IHR4dD1zY2FsZT09PSJkYiI/YCR7LWkqMjB9IGRCYDpgJHsxMDAtaSoyNX0lYDtzY3R4LmZpbGxUZXh0KHR4dCw0KmQscGxvdFBhZC50K3BoKmkvNCs0KmQpfQogIC8vIENhbnZhcyBiYWNraW5nLXN0b3JlIGNvb3JkaW5hdGVzIGFyZSBkZXZpY2UtcGl4ZWwgc2NhbGVkOyB1c2UgdGhlIHBsb3QgZ2VvbWV0cnkKICAvLyBhbHJlYWR5IGNhbGN1bGF0ZWQgYWJvdmUgc28gYmFycyBhbmQgZHJhZyBwb3NpdGlvbnMgbGluZSB1cC4KICBjb25zdCBwbG90Vz1wdywgcGxvdEg9cGg7CiAgY29uc3QgYnc9cGxvdFcvY291bnQ7CiAgZm9yKGxldCBuPTE7bjw9Y291bnQ7bisrKXsKICAgIGNvbnN0IGE9TWF0aC5tYXgoMCxhcnJbbi0xXXx8MCk7CiAgICBjb25zdCBkaXNwbGF5QW1wbGl0dWRlPWEvZGlzcGxheUJhc2U7CiAgICBsZXQgbm9ybT1zY2FsZT09PSJkYiIgPyBNYXRoLm1heCgwLCgyMCpNYXRoLmxvZzEwKE1hdGgubWF4KGRpc3BsYXlBbXBsaXR1ZGUsMWUtNCkpKzgwKS84MCkgOiBNYXRoLm1pbigxLGRpc3BsYXlBbXBsaXR1ZGUpOwogICAgY29uc3QgYmg9bm9ybSpwbG90SDsKICAgIHNjdHguZmlsbFN0eWxlPW49PT0xPyIjYzRiNWZkIjoiIzdkZDNmYyI7CiAgICBzY3R4LmZpbGxSZWN0KHBsb3RQYWQubCsobi0xKSpidytNYXRoLm1heCgxKmQsYncqLjE0KSxwbG90UGFkLnQrcGxvdEgtYmgsTWF0aC5tYXgoMipkLGJ3Ki43MiksYmgpOwogIH0KICBzY3R4LmZpbGxTdHlsZT0iIzhmOWJhZCI7CiAgZm9yKGxldCBuPTE7bjw9Y291bnQ7bis9TWF0aC5tYXgoMSxNYXRoLmNlaWwoY291bnQvOCkpKXsKICAgIGNvbnN0IHg9cGxvdFBhZC5sKyhuLS41KSpidztzY3R4LmZpbGxUZXh0KG4seC04KmQsaC04KmQpCiAgfQogIHNjdHguZmlsbFRleHQoIuWAjemfs+eVquWPtyIsdy8yLTI4KmQsaC04KmQpOwp9CmZ1bmN0aW9uIGRyYXdXYXZlKCl7CiAgcmVzaXplQ2FudmFzKHdhdmUpOyBjb25zdCBkPXdhdmUuX2Qsdz13YXZlLndpZHRoLGg9d2F2ZS5oZWlnaHQ7CiAgd2N0eC5jbGVhclJlY3QoMCwwLHcsaCk7d2N0eC5maWxsU3R5bGU9IiMwYzEwMTYiO3djdHguZmlsbFJlY3QoMCwwLHcsaCk7CiAgd2N0eC5zdHJva2VTdHlsZT0iIzI5MzM0NCI7d2N0eC5iZWdpblBhdGgoKTt3Y3R4Lm1vdmVUbygwLGgvMik7d2N0eC5saW5lVG8odyxoLzIpO3djdHguc3Ryb2tlKCk7CiAgY29uc3QgYT1jdXJyZW50QXJyYXkoKSwgc2FtcGxlcz0xMDAwOwogIHdjdHguYmVnaW5QYXRoKCk7CiAgZm9yKGxldCBpPTA7aTxzYW1wbGVzO2krKyl7CiAgICBjb25zdCB0PWkvc2FtcGxlczsgbGV0IHk9MDsKICAgIGZvcihsZXQgbj0xO248PU1BWF9IQVJNT05JQ1M7bisrKXsKICAgICAgY29uc3QgYW1wPWFbbi0xXXx8MCwgcGg9KHN0YXRlLnBoYXNlc1tuLTFdfHwwKSpNYXRoLlBJLzE4MDsKICAgICAgeSs9YW1wKk1hdGguc2luKDIqTWF0aC5QSSpuKnQrcGgpOwogICAgfQogICAgeS89TWF0aC5tYXgoMSxhLnJlZHVjZSgocCx4KT0+cCtNYXRoLmFicyh4fHwwKSwwKSk7CiAgICBjb25zdCB4PWkvKHNhbXBsZXMtMSkqdywgeXk9aC8yLXkqKGgqLjQyKTsKICAgIGlmKGk9PT0wKXdjdHgubW92ZVRvKHgseXkpO2Vsc2Ugd2N0eC5saW5lVG8oeCx5eSk7CiAgfQogIHdjdHguc3Ryb2tlU3R5bGU9IiM3ZGQzZmMiO3djdHgubGluZVdpZHRoPTIqZDt3Y3R4LnN0cm9rZSgpOwp9CmZ1bmN0aW9uIHJlbmRlcigpe2RyYXdTcGVjdHJ1bSgpO2RyYXdXYXZlKCk7cmVuZGVyUGhhc2VHcmlkKCl9CmZ1bmN0aW9uIHJlbmRlcldhdmUoKXtkcmF3V2F2ZSgpfQoKZnVuY3Rpb24gZ2V0SGFybW9uaWNJbmRleEF0UG9pbnRlcihlKXsKICBjb25zdCByPXNwZWN0cnVtLmdldEJvdW5kaW5nQ2xpZW50UmVjdCgpLGNvdW50PStkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgidmlzaWJsZUNvdW50IikudmFsdWU7CiAgY29uc3QgeD1lLmNsaWVudFgtci5sZWZ0LCB5PWUuY2xpZW50WS1yLnRvcDsKICBjb25zdCBwYWQ9e2w6MzgscjoxMCx0OjEyLGI6Mjh9OwogIGlmKHg8cGFkLmwgfHwgeD5yLndpZHRoLXBhZC5yIHx8IHk8cGFkLnQgfHwgeT5yLmhlaWdodC1wYWQuYikgcmV0dXJuIDA7CiAgY29uc3QgcGxvdFc9TWF0aC5tYXgoMSxyLndpZHRoLXBhZC5sLXBhZC5yKTsKICBjb25zdCBuPU1hdGguZmxvb3IoKHgtcGFkLmwpL3Bsb3RXKmNvdW50KSsxOwogIHJldHVybiBuPj0xJiZuPD1NYXRoLm1pbihNQVhfSEFSTU9OSUNTLGNvdW50KT9uOjA7Cn0KZnVuY3Rpb24gcG9pbnRlclRvSGFybW9uaWMoZSl7CiAgY29uc3Qgcj1zcGVjdHJ1bS5nZXRCb3VuZGluZ0NsaWVudFJlY3QoKSxjb3VudD0rZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInZpc2libGVDb3VudCIpLnZhbHVlOwogIGNvbnN0IHg9ZS5jbGllbnRYLXIubGVmdCwgeT1lLmNsaWVudFktci50b3A7CiAgLy8gUG9pbnRlciBjb29yZGluYXRlcyBhcmUgQ1NTIHBpeGVscy4gS2VlcCBoaXQtdGVzdGluZyBwYWRkaW5nIGluIENTUyBwaXhlbHMgdG9vLgogIGNvbnN0IHBhZD17bDozOCxyOjEwLHQ6MTIsYjoyOH07CiAgY29uc3QgcGxvdFc9TWF0aC5tYXgoMSxyLndpZHRoLXBhZC5sLXBhZC5yKSwgcGxvdEg9TWF0aC5tYXgoMSxyLmhlaWdodC1wYWQudC1wYWQuYik7CiAgaWYoeDxwYWQubCB8fCB4PnIud2lkdGgtcGFkLnIgfHwgeTxwYWQudCB8fCB5PnIuaGVpZ2h0LXBhZC5iKSByZXR1cm47CiAgY29uc3Qgbj1NYXRoLmZsb29yKCh4LXBhZC5sKS9wbG90Vypjb3VudCkrMTsKICBpZihuPD0xIHx8IG4+TWF0aC5taW4oTUFYX0hBUk1PTklDUyxjb3VudCkpIHJldHVybjsgLy8g5Z+66Z+z44Gv5Zu65a6a44GX44CB57eo6ZuG5LiN5Y+vCiAgbGV0IHZhbD0xLSh5LXBhZC50KS9wbG90SDsKICAvLyDooajnpLrkuIrjga7libLlkIjjgpLjgIHml6LlrZjjga7ln7rpn7PooajnpLrlgI3njofjgavlr77lv5zjgZnjgovlrp/pmpvjga7mjK/luYXjgbjlpInmj5vjgZnjgovjgIIKICAvLyDln7rpn7Pjga7ooajnpLrlgI3njofjgoTjgrnjg5rjgq/jg4jjg6vmj4/nlLvlgbTjga7jgrnjgrHjg7zjg6vjga/lpInmm7TjgZfjgarjgYTjgIIKICBjb25zdCBhcnJCYXNlPXN0YXRlLnZvd2Vsc1tzdGF0ZS5jdXJyZW50Vm93ZWxdOwogIGNvbnN0IGRpc3BsYXlCYXNlPWFyckJhc2UgJiYgTWF0aC5hYnMoYXJyQmFzZVswXXx8MCk+MWUtOSA/IE1hdGguYWJzKGFyckJhc2VbMF0pIDogMTsKICB2YWw9TWF0aC5tYXgoMCxNYXRoLm1pbigxLHZhbCkpKmRpc3BsYXlCYXNlOwogIC8vIOacqueUn+aIkOOBruavjemfs+OBr+OAgeacgOWIneOBrue3qOmbhuaTjeS9nOOBp+eLrOeri+OBl+OBn+OCueODmuOCr+ODiOODq+mFjeWIl+OCkuS9nOOCi+OAggogIGNvbnN0IGFycj1zdGF0ZS52b3dlbHNbc3RhdGUuY3VycmVudFZvd2VsXSA/IGNsb25lKHN0YXRlLnZvd2Vsc1tzdGF0ZS5jdXJyZW50Vm93ZWxdKSA6IEFycmF5KE1BWF9IQVJNT05JQ1MpLmZpbGwoMCk7CiAgYXJyW24tMV09dmFsOwogIHN0YXRlLnZvd2Vsc1tzdGF0ZS5jdXJyZW50Vm93ZWxdPWFycjsKICBzdGF0ZS5oYXJtb25pY3M9Y2xvbmUoYXJyKTsKICByZW5kZXIoKTsgdXBkYXRlQXVkaW8oKTsKfQpzcGVjdHJ1bS5hZGRFdmVudExpc3RlbmVyKCJwb2ludGVyZG93biIsZT0+ewogIC8vIOWfuumfs++8iDHlgI3pn7PvvInjga7jg5Djg7zjgYvjgonjga/jg4njg6njg4PjgrDnt6jpm4bjgpLplovlp4vjgZfjgarjgYTjgIIKICBpZihnZXRIYXJtb25pY0luZGV4QXRQb2ludGVyKGUpPD0xKXJldHVybjsKICBlLnByZXZlbnREZWZhdWx0KCk7CiAgZHJhZ1N0YXJ0U25hcHNob3Q9c25hcHNob3RTdGF0ZSgpOwogIGRyYWdnaW5nPXRydWU7CiAgdHJ5e3NwZWN0cnVtLnNldFBvaW50ZXJDYXB0dXJlKGUucG9pbnRlcklkKX1jYXRjaChfKXsgfQogIHBvaW50ZXJUb0hhcm1vbmljKGUpOwp9KTsKc3BlY3RydW0uYWRkRXZlbnRMaXN0ZW5lcigicG9pbnRlcm1vdmUiLGU9PntpZihkcmFnZ2luZyl7ZS5wcmV2ZW50RGVmYXVsdCgpO3BvaW50ZXJUb0hhcm1vbmljKGUpfX0pOwpmdW5jdGlvbiBmaW5pc2hTcGVjdHJ1bURyYWcoKXsKICBpZighZHJhZ2dpbmcpcmV0dXJuOwogIGRyYWdnaW5nPWZhbHNlOwogIGlmKGRyYWdTdGFydFNuYXBzaG90KXsKICAgIGNvbnN0IGJlZm9yZT1KU09OLnN0cmluZ2lmeShkcmFnU3RhcnRTbmFwc2hvdCk7CiAgICBjb25zdCBhZnRlcj1KU09OLnN0cmluZ2lmeShzbmFwc2hvdFN0YXRlKCkpOwogICAgaWYoYmVmb3JlIT09YWZ0ZXIpcHVzaFVuZG9TbmFwc2hvdChkcmFnU3RhcnRTbmFwc2hvdCk7CiAgfQogIGRyYWdTdGFydFNuYXBzaG90PW51bGw7Cn0Kc3BlY3RydW0uYWRkRXZlbnRMaXN0ZW5lcigicG9pbnRlcnVwIixmaW5pc2hTcGVjdHJ1bURyYWcpOwpzcGVjdHJ1bS5hZGRFdmVudExpc3RlbmVyKCJwb2ludGVyY2FuY2VsIixmaW5pc2hTcGVjdHJ1bURyYWcpOwpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgidW5kb0J0biIpLm9uY2xpY2s9KCk9PnsKICBpZighdW5kb0hpc3RvcnkubGVuZ3RoKXJldHVybjsKICByZWRvSGlzdG9yeS5wdXNoKHNuYXBzaG90U3RhdGUoKSk7cmVzdG9yZVNuYXBzaG90KHVuZG9IaXN0b3J5LnBvcCgpKTsKfTsKZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInJlZG9CdG4iKS5vbmNsaWNrPSgpPT57CiAgaWYoIXJlZG9IaXN0b3J5Lmxlbmd0aClyZXR1cm47CiAgdW5kb0hpc3RvcnkucHVzaChzbmFwc2hvdFN0YXRlKCkpO3Jlc3RvcmVTbmFwc2hvdChyZWRvSGlzdG9yeS5wb3AoKSk7Cn07Cgpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgicmVzZXRCdG4iKS5vbmNsaWNrPSgpPT57Y2xlYXJIaXN0b3J5KCk7c3RhdGUudm9pY2VUeXBlPSJtYWxlIjtzdGF0ZS5mdW5kYW1lbnRhbD0xMzA7c3RhdGUuY3VycmVudFZvd2VsPSJhIjtzdGF0ZS5vdXRwdXRHYWluPTE7c3RhdGUudm93ZWxHYWlucz17YToxLGk6MSx1OjEsZToxLG86MX07c3RhdGUuaGFybW9uaWNzPUFycmF5KE1BWF9IQVJNT05JQ1MpLmZpbGwoMCk7c3RhdGUuaGFybW9uaWNzWzBdPTE7c3RhdGUudm93ZWxzPXthOm51bGwsaTpudWxsLHU6bnVsbCxlOm51bGwsbzpudWxsfTtzdGF0ZS5waGFzZXMuZmlsbCgwKTtvY3RhdmVTaGlmdD0wO2NvbW1pdFZvaWNlTmFtZShzdGF0ZS5uYW1lKTtzeW5jQ29udHJvbHMoKTt1cGRhdGVOb3RlQnV0dG9ucygpO3VwZGF0ZUhpc3RvcnlCdXR0b25zKCk7cmVuZGVyKCk7dXBkYXRlQXVkaW8oKTt0b2FzdCgi44Oq44K744OD44OI44GX44G+44GX44GfIil9Owpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgidmlzaWJsZUNvdW50Iikub25jaGFuZ2U9cmVuZGVyOwpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgidm9pY2VHYWluU2xpZGVyIikuYWRkRXZlbnRMaXN0ZW5lcigiaW5wdXQiLGU9PnsKIGNvbnN0IHBlcmNlbnQ9TWF0aC5tYXgoMCxNYXRoLm1pbig4MDAsTnVtYmVyKGUudGFyZ2V0LnZhbHVlKXx8MCkpOwogc3RhdGUub3V0cHV0R2Fpbj1wZXJjZW50LzEwMDsKIGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJ2b2ljZUdhaW5WYWx1ZSIpLnRleHRDb250ZW50PXBlcmNlbnQrIiUiOwogaWYoYXVkaW9DdHgmJnByZXZpZXdQbGF5aW5nKWdhaW4uZ2Fpbi5zZXRUYXJnZXRBdFRpbWUoY29tYmluZWRQcmV2aWV3R2FpbigpLGF1ZGlvQ3R4LmN1cnJlbnRUaW1lLC4wMTUpOwp9KTsKZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInZvd2VsR2FpblNsaWRlciIpLmFkZEV2ZW50TGlzdGVuZXIoImlucHV0IixlPT57CiBjb25zdCBwZXJjZW50PU1hdGgubWF4KDAsTWF0aC5taW4oODAwLE51bWJlcihlLnRhcmdldC52YWx1ZSl8fDApKTsKIHN0YXRlLnZvd2VsR2FpbnM9c3RhdGUudm93ZWxHYWluc3x8e2E6MSxpOjEsdToxLGU6MSxvOjF9Owogc3RhdGUudm93ZWxHYWluc1tzdGF0ZS5jdXJyZW50Vm93ZWxdPXBlcmNlbnQvMTAwOwogZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInZvd2VsR2FpblZhbHVlIikudGV4dENvbnRlbnQ9cGVyY2VudCsiJSI7CiBpZihhdWRpb0N0eCYmcHJldmlld1BsYXlpbmcpZ2Fpbi5nYWluLnNldFRhcmdldEF0VGltZShjb21iaW5lZFByZXZpZXdHYWluKCksYXVkaW9DdHguY3VycmVudFRpbWUsLjAxNSk7Cn0pOwpmdW5jdGlvbiBzZXRWb3dlbFRhYnModil7CiAgZG9jdW1lbnQucXVlcnlTZWxlY3RvckFsbCgiLnZvd2VsLXRhYiIpLmZvckVhY2goYj0+ewogICAgY29uc3QgYWN0aXZlPWIuZGF0YXNldC52b3dlbD09PXY7CiAgICBiLmNsYXNzTGlzdC50b2dnbGUoImFjdGl2ZSIsYWN0aXZlKTsKICAgIGIuc2V0QXR0cmlidXRlKCJhcmlhLXNlbGVjdGVkIixTdHJpbmcoYWN0aXZlKSk7CiAgfSk7Cn0KZnVuY3Rpb24gc2V0Vm9pY2VUYWJzKHYpewogIGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoIi52b2ljZS10YWIiKS5mb3JFYWNoKGI9PnsKICAgIGNvbnN0IGFjdGl2ZT1iLmRhdGFzZXQudm9pY2U9PT12OwogICAgYi5jbGFzc0xpc3QudG9nZ2xlKCJhY3RpdmUiLGFjdGl2ZSk7CiAgICBiLnNldEF0dHJpYnV0ZSgiYXJpYS1zZWxlY3RlZCIsU3RyaW5nKGFjdGl2ZSkpOwogIH0pOwp9CmRvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoIi52b2ljZS10YWIiKS5mb3JFYWNoKGI9PmIub25jbGljaz0oKT0+ewogIHN0YXRlLnZvaWNlVHlwZT1iLmRhdGFzZXQudm9pY2U7CiAgc2V0Vm9pY2VUYWJzKHN0YXRlLnZvaWNlVHlwZSk7Cn0pOwpkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCJbZGF0YS10ZW1wbGF0ZS12b3dlbF0iKS5mb3JFYWNoKGI9PmIub25jbGljaz0oKT0+ewogIGNsZWFySGlzdG9yeSgpOwogIGNvbnN0IHY9Yi5kYXRhc2V0LnRlbXBsYXRlVm93ZWw7CiAgc3RhdGUuY3VycmVudFZvd2VsPXY7CiAgc3RhdGUudm93ZWxzW3ZdPXNwZWN0cmFsRW52ZWxvcGUoc3RhdGUuZnVuZGFtZW50YWwsc3RhdGUudm9pY2VUeXBlLHYpOwogIHN0YXRlLmhhcm1vbmljcz1jbG9uZShzdGF0ZS52b3dlbHNbdl0pOwogIHNldFZvd2VsVGFicyh2KTsKICBzeW5jQ29udHJvbHMoKTsKICByZW5kZXIoKTt1cGRhdGVBdWRpbygpOwogIHRvYXN0KGDjgIwke2IudGV4dENvbnRlbnR944CN44Gu44OG44Oz44OX44Os44O844OI44KS55Sf5oiQ44GX44G+44GX44GfYCk7Cn0pOwpsZXQgb2N0YXZlU2hpZnQ9MDsKZnVuY3Rpb24gdXBkYXRlTm90ZUJ1dHRvbnMoKXsKICBkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCJbZGF0YS1ub3RlXSIpLmZvckVhY2goYj0+ewogICAgY29uc3QgYmFzZT1OdW1iZXIoYi5kYXRhc2V0LmJhc2VOb3RlfHxiLmRhdGFzZXQubm90ZSk7CiAgICBiLmRhdGFzZXQuYmFzZU5vdGU9U3RyaW5nKGJhc2UpOwogICAgYi5kYXRhc2V0Lm5vdGU9U3RyaW5nKGJhc2UqTWF0aC5wb3coMixvY3RhdmVTaGlmdCkpOwogICAgY29uc3QgbmFtZT1iLmRhdGFzZXQubm90ZU5hbWU7CiAgICBjb25zdCBvY3RhdmU9TnVtYmVyKGIuZGF0YXNldC5iYXNlT2N0YXZlfHw0KStvY3RhdmVTaGlmdDsKICAgIGIudGV4dENvbnRlbnQ9YCR7bmFtZX0ke29jdGF2ZX1gOwogIH0pOwp9CmRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJvY3RhdmVEb3duIikub25jbGljaz0oKT0+e2lmKG9jdGF2ZVNoaWZ0Pi0zKXtvY3RhdmVTaGlmdC0tO3VwZGF0ZU5vdGVCdXR0b25zKCl9fTsKZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoIm9jdGF2ZVVwIikub25jbGljaz0oKT0+e2lmKG9jdGF2ZVNoaWZ0PDMpe29jdGF2ZVNoaWZ0Kys7dXBkYXRlTm90ZUJ1dHRvbnMoKX19OwpmdW5jdGlvbiBzZWxlY3RWb3dlbCh2KXsKICAvLyDjgrnjg5rjgq/jg4jjg6vjga7mr43pn7Pjgr/jg5bjga/ooajnpLrjg7vnt6jpm4blr77osaHjga7liIfjgormm7/jgYjjgaDjgZHjgpLooYzjgYTjgIEKICAvLyDjg4bjg7Pjg5fjg6zjg7zjg4jnlJ/miJDjga/kuIrpg6jjga7jgIzjgYLjg7vjgYTjg7vjgYbjg7vjgYjjg7vjgYrjgI3jg5zjgr/jg7PjgavpmZDlrprjgZnjgovjgIIKICBzdGF0ZS5jdXJyZW50Vm93ZWw9djsKICBpZihzdGF0ZS52b3dlbHNbdl0pIHN0YXRlLmhhcm1vbmljcz1jbG9uZShzdGF0ZS52b3dlbHNbdl0pOwogIHNldFZvd2VsVGFicyh2KTsKICBzeW5jQ29udHJvbHMoKTsKICByZW5kZXIoKTsKICB1cGRhdGVBdWRpbygpOwp9CmRvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoIi52b3dlbC10YWIiKS5mb3JFYWNoKGI9PmIub25jbGljaz0oKT0+c2VsZWN0Vm93ZWwoYi5kYXRhc2V0LnZvd2VsKSk7CmRvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoIltkYXRhLW5vdGVdIikuZm9yRWFjaChiPT5iLm9uY2xpY2s9YXN5bmMoKT0+e2F3YWl0IGVuc3VyZUF1ZGlvKCk7cHJldmlld1BsYXlpbmc9dHJ1ZTtzZXRGcmVxdWVuY3koK2IuZGF0YXNldC5ub3RlKTtnYWluLmdhaW4uc2V0VGFyZ2V0QXRUaW1lKGNvbWJpbmVkUHJldmlld0dhaW4oKSxhdWRpb0N0eC5jdXJyZW50VGltZSwuMDEpO30pOwpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiYVByZXZpZXciKS5vbmNsaWNrPWFzeW5jKCk9Pnthd2FpdCBlbnN1cmVBdWRpbygpO3ByZXZpZXdQbGF5aW5nPXRydWU7c2V0RnJlcXVlbmN5KHN0YXRlLmZ1bmRhbWVudGFsKTtnYWluLmdhaW4uc2V0VGFyZ2V0QXRUaW1lKGNvbWJpbmVkUHJldmlld0dhaW4oKSxhdWRpb0N0eC5jdXJyZW50VGltZSwuMDEpfTsKZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInN0b3BQcmV2aWV3Iikub25jbGljaz0oKT0+e3ByZXZpZXdQbGF5aW5nPWZhbHNlO2lmKGF1ZGlvQ3R4KWdhaW4uZ2Fpbi5zZXRUYXJnZXRBdFRpbWUoMCxhdWRpb0N0eC5jdXJyZW50VGltZSwuMDE1KX07Cgpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgicGhhc2VUb2dnbGUiKS5vbmNsaWNrPSgpPT57CiAgY29uc3QgYT1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgicGhhc2VBcmVhIiksIGhpZGRlbj1hLmhpZGRlbjsKICBhLmhpZGRlbj0haGlkZGVuO2RvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJwaGFzZVRvZ2dsZSIpLnRleHRDb250ZW50PWhpZGRlbj8i6Z2e6KGo56S6Ijoi6KGo56S6IjsKfTsKZnVuY3Rpb24gcmVuZGVyUGhhc2VHcmlkKCl7CiAgY29uc3QgZ3JpZD1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgicGhhc2VHcmlkIik7Z3JpZC5pbm5lckhUTUw9IiI7CiAgY29uc3QgY291bnQ9TWF0aC5taW4oTUFYX0hBUk1PTklDUywrZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInZpc2libGVDb3VudCIpLnZhbHVlKTsKICBmb3IobGV0IG49MTtuPD1jb3VudDtuKyspewogICAgY29uc3QgZD1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCJkaXYiKTtkLmNsYXNzTmFtZT0icGhhc2VJdGVtIjsKICAgIGQuaW5uZXJIVE1MPWA8bGFiZWw+JHtufeWAjemfszwvbGFiZWw+PGlucHV0IHR5cGU9Im51bWJlciIgbWluPSItMTgwIiBtYXg9IjE4MCIgc3RlcD0iMSIgdmFsdWU9IiR7c3RhdGUucGhhc2VzW24tMV19Ij5gOwogICAgZC5xdWVyeVNlbGVjdG9yKCJpbnB1dCIpLm9uaW5wdXQ9ZT0+e3N0YXRlLnBoYXNlc1tuLTFdPStlLnRhcmdldC52YWx1ZXx8MDtyZW5kZXJXYXZlKCk7dXBkYXRlQXVkaW8oKX07CiAgICBncmlkLmFwcGVuZENoaWxkKGQpOwogIH0KfQpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgicGhhc2VaZXJvIikub25jbGljaz0oKT0+e3N0YXRlLnBoYXNlcy5maWxsKDApO3JlbmRlcigpO3VwZGF0ZUF1ZGlvKCl9Owpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgicGhhc2VSYW5kb20iKS5vbmNsaWNrPSgpPT57Zm9yKGxldCBpPTA7aTxNQVhfSEFSTU9OSUNTO2krKylzdGF0ZS5waGFzZXNbaV09TWF0aC5yb3VuZChNYXRoLnJhbmRvbSgpKjM2MC0xODApO3JlbmRlcigpO3VwZGF0ZUF1ZGlvKCl9OwoKZnVuY3Rpb24gc3luY0NvbnRyb2xzKCl7CiBzZXRWb2ljZVRhYnMoc3RhdGUudm9pY2VUeXBlKTsKIHNldFZvd2VsVGFicyhzdGF0ZS5jdXJyZW50Vm93ZWwpOwogY29uc3Qgc2xpZGVyPWRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJ2b2ljZUdhaW5TbGlkZXIiKTsKIGNvbnN0IHZhbHVlPU1hdGgucm91bmQoTWF0aC5tYXgoMCxNYXRoLm1pbig4LE51bWJlcihzdGF0ZS5vdXRwdXRHYWluPz8xKSkpKjEwMCk7CiBzbGlkZXIudmFsdWU9U3RyaW5nKHZhbHVlKTsKIGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJ2b2ljZUdhaW5WYWx1ZSIpLnRleHRDb250ZW50PXZhbHVlKyIlIjsKIHN0YXRlLnZvd2VsR2FpbnM9c3RhdGUudm93ZWxHYWluc3x8e2E6MSxpOjEsdToxLGU6MSxvOjF9OwogY29uc3Qgdm93ZWxWYWx1ZT1NYXRoLnJvdW5kKE1hdGgubWF4KDAsTWF0aC5taW4oOCxOdW1iZXIoc3RhdGUudm93ZWxHYWluc1tzdGF0ZS5jdXJyZW50Vm93ZWxdPz8xKSkpKjEwMCk7CiBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgidm93ZWxHYWluU2xpZGVyIikudmFsdWU9U3RyaW5nKHZvd2VsVmFsdWUpOwogZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInZvd2VsR2FpblZhbHVlIikudGV4dENvbnRlbnQ9dm93ZWxWYWx1ZSsiJSI7CiBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgidm93ZWxHYWluTmFtZSIpLnRleHRDb250ZW50PSh7YToi44GCIixpOiLjgYQiLHU6IuOBhiIsZToi44GIIixvOiLjgYoifSlbc3RhdGUuY3VycmVudFZvd2VsXXx8c3RhdGUuY3VycmVudFZvd2VsOwogaWYoYXVkaW9DdHgmJnByZXZpZXdQbGF5aW5nKWdhaW4uZ2Fpbi5zZXRUYXJnZXRBdFRpbWUoY29tYmluZWRQcmV2aWV3R2FpbigpLGF1ZGlvQ3R4LmN1cnJlbnRUaW1lLC4wMTUpOwp9CmRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJzYXZlQnRuIikub25jbGljaz0oKT0+ewogY29uc3QgZGF0YT17Li4uc3RhdGUsdm93ZWxHYWluczp7YToxLGk6MSx1OjEsZToxLG86MSwuLi4oc3RhdGUudm93ZWxHYWluc3x8e30pfSxoYXJtb25pY3M6QXJyYXkuZnJvbShzdGF0ZS5oYXJtb25pY3MpLHBoYXNlczpBcnJheS5mcm9tKHN0YXRlLnBoYXNlcyksdm93ZWxzOk9iamVjdC5mcm9tRW50cmllcyhPYmplY3QuZW50cmllcyhzdGF0ZS52b3dlbHMpLm1hcCgoW2ssdl0pPT5bayx2P0FycmF5LmZyb20odik6bnVsbF0pKX07CiBjb25zdCBibG9iPW5ldyBCbG9iKFtKU09OLnN0cmluZ2lmeShkYXRhLG51bGwsMildLHt0eXBlOiJhcHBsaWNhdGlvbi9qc29uIn0pOwogY29uc3QgYT1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCJhIik7YS5ocmVmPVVSTC5jcmVhdGVPYmplY3RVUkwoYmxvYik7Y29uc3Qgc2FmZU5hbWU9KHN0YXRlLm5hbWV8fCJVbnRpdGxlZCBWb2ljZSIpLnJlcGxhY2UoL1tcXC86Kj8iPD58XHgwMC1ceDFmXS9nLCJfIikudHJpbSgpfHwiVW50aXRsZWQgVm9pY2UiO2EuZG93bmxvYWQ9c2FmZU5hbWUrIi52b2ljZSI7YS5jbGljaygpO3NldFRpbWVvdXQoKCk9PlVSTC5yZXZva2VPYmplY3RVUkwoYS5ocmVmKSwxMDAwKTsKfTsKZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImxvYWRCdG4iKS5vbmNsaWNrPSgpPT5kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiZmlsZUlucHV0IikuY2xpY2soKTsKZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImZpbGVJbnB1dCIpLm9uY2hhbmdlPWFzeW5jIGU9PnsKIGNvbnN0IGY9ZS50YXJnZXQuZmlsZXNbMF07aWYoIWYpcmV0dXJuOwogdHJ5ewogIGNvbnN0IHg9SlNPTi5wYXJzZShhd2FpdCBmLnRleHQoKSk7CiAgaWYoIXguaGFybW9uaWNzfHwheC5waGFzZXMpdGhyb3cgbmV3IEVycm9yKCJpbnZhbGlkIik7CiAgY2xlYXJIaXN0b3J5KCk7CiAgc3RhdGUubmFtZT10eXBlb2YgeC5uYW1lPT09InN0cmluZyImJngubmFtZS50cmltKCk/eC5uYW1lLnRyaW0oKToiVW50aXRsZWQgVm9pY2UiO2NvbW1pdFZvaWNlTmFtZShzdGF0ZS5uYW1lKTtzdGF0ZS52b2ljZVR5cGU9eC52b2ljZVR5cGV8fCJtYWxlIjtzdGF0ZS5mdW5kYW1lbnRhbD14LmZ1bmRhbWVudGFsfHwxMzA7c3RhdGUuY3VycmVudFZvd2VsPXguY3VycmVudFZvd2VsfHwiYSI7c3RhdGUub3V0cHV0R2Fpbj1OdW1iZXIuaXNGaW5pdGUoTnVtYmVyKHgub3V0cHV0R2FpbikpP01hdGgubWF4KDAsTWF0aC5taW4oOCxOdW1iZXIoeC5vdXRwdXRHYWluKSkpOjE7c3RhdGUudm93ZWxHYWlucz17YToxLGk6MSx1OjEsZToxLG86MSwuLi4oeC52b3dlbEdhaW5zfHx7fSl9OwogIHN0YXRlLmhhcm1vbmljcz1BcnJheS5mcm9tKHtsZW5ndGg6TUFYX0hBUk1PTklDU30sKF8saSk9PisoeC5oYXJtb25pY3NbaV0/PyhpPT09MD8xOjApKSk7CiAgc3RhdGUucGhhc2VzPUFycmF5LmZyb20oe2xlbmd0aDpNQVhfSEFSTU9OSUNTfSwoXyxpKT0+Kyh4LnBoYXNlc1tpXT8/MCkpOwogIHN0YXRlLnZvd2Vscz17YTpudWxsLGk6bnVsbCx1Om51bGwsZTpudWxsLG86bnVsbCwuLi4oeC52b3dlbHN8fHt9KX07CiAgc3luY0NvbnRyb2xzKCk7c2V0Vm93ZWxUYWJzKHN0YXRlLmN1cnJlbnRWb3dlbCk7cmVuZGVyKCk7dXBkYXRlQXVkaW8oKTt0b2FzdCgiVk9JQ0XjgpLoqq3jgb/ovrzjgb/jgb7jgZfjgZ8iKTsKIH1jYXRjaChlcnIpe2FsZXJ0KCJWT0lDReODleOCoeOCpOODq+OCkuiqreOBv+i+vOOCgeOBvuOBm+OCk+OBp+OBl+OBn+OAgiIpfQogZS50YXJnZXQudmFsdWU9IiI7Cn07Cgp3aW5kb3cuYWRkRXZlbnRMaXN0ZW5lcigicmVzaXplIixyZW5kZXIpOwpjb21taXRWb2ljZU5hbWUoc3RhdGUubmFtZSk7c3luY0NvbnRyb2xzKCk7dXBkYXRlTm90ZUJ1dHRvbnMoKTt1cGRhdGVIaXN0b3J5QnV0dG9ucygpO3JlbmRlcigpOwo8L3NjcmlwdD4KCjxzY3JpcHQ+CmZ1bmN0aW9uIG1ha2VWb2ljZVN5bnRoVHJhbnNmZXJEYXRhKCl7CiByZXR1cm4gey4uLnN0YXRlLG91dHB1dEdhaW46TWF0aC5tYXgoMCxNYXRoLm1pbig4LE51bWJlcihzdGF0ZS5vdXRwdXRHYWluPz8xKSkpLHZvd2VsR2FpbnM6e2E6MSxpOjEsdToxLGU6MSxvOjEsLi4uKHN0YXRlLnZvd2VsR2FpbnN8fHt9KX0saGFybW9uaWNzOkFycmF5LmZyb20oc3RhdGUuaGFybW9uaWNzKSxwaGFzZXM6QXJyYXkuZnJvbShzdGF0ZS5waGFzZXMpLHZvd2VsczpPYmplY3QuZnJvbUVudHJpZXMoT2JqZWN0LmVudHJpZXMoc3RhdGUudm93ZWxzKS5tYXAoKFtrLHZhbF0pPT5bayx2YWw/QXJyYXkuZnJvbSh2YWwpOm51bGxdKSl9Owp9CmZ1bmN0aW9uIGFwcGx5SW5jb21pbmdWb2ljZVN5bnRoRGF0YShkYXRhKXsKIGNsZWFySGlzdG9yeSgpOwogaWYoZGF0YSl7CiAgc3RhdGUubmFtZT10eXBlb2YgZGF0YS5uYW1lPT09J3N0cmluZycmJmRhdGEubmFtZS50cmltKCk/ZGF0YS5uYW1lLnRyaW0oKTonVW50aXRsZWQgVm9pY2UnOwogIHN0YXRlLnZvaWNlVHlwZT1kYXRhLnZvaWNlVHlwZXx8J21hbGUnOwogIHN0YXRlLmZ1bmRhbWVudGFsPU51bWJlcihkYXRhLmZ1bmRhbWVudGFsKXx8MTMwOwogIHN0YXRlLmN1cnJlbnRWb3dlbD1bJ2EnLCdpJywndScsJ2UnLCdvJ10uaW5jbHVkZXMoZGF0YS5jdXJyZW50Vm93ZWwpP2RhdGEuY3VycmVudFZvd2VsOidhJzsKICBzdGF0ZS5vdXRwdXRHYWluPU1hdGgubWF4KDAsTWF0aC5taW4oOCxOdW1iZXIoZGF0YS5vdXRwdXRHYWluPz8xKSkpOwogIHN0YXRlLnZvd2VsR2FpbnM9e2E6MSxpOjEsdToxLGU6MSxvOjEsLi4uKGRhdGEudm93ZWxHYWluc3x8e30pfTsKICBzdGF0ZS5oYXJtb25pY3M9QXJyYXkuZnJvbSh7bGVuZ3RoOk1BWF9IQVJNT05JQ1N9LChfLGkpPT5OdW1iZXIoZGF0YS5oYXJtb25pY3M/LltpXT8/KGk9PT0wPzE6MCkpKTsKICBzdGF0ZS5waGFzZXM9QXJyYXkuZnJvbSh7bGVuZ3RoOk1BWF9IQVJNT05JQ1N9LChfLGkpPT5OdW1iZXIoZGF0YS5waGFzZXM/LltpXT8/MCkpOwogIHN0YXRlLnZvd2Vscz17YTpudWxsLGk6bnVsbCx1Om51bGwsZTpudWxsLG86bnVsbCwuLi4oZGF0YS52b3dlbHN8fHt9KX07CiAgZm9yKGNvbnN0IGtleSBvZiBbJ2EnLCdpJywndScsJ2UnLCdvJ10pIGlmKEFycmF5LmlzQXJyYXkoc3RhdGUudm93ZWxzW2tleV0pKSBzdGF0ZS52b3dlbHNba2V5XT1BcnJheS5mcm9tKHtsZW5ndGg6TUFYX0hBUk1PTklDU30sKF8saSk9Pk51bWJlcihzdGF0ZS52b3dlbHNba2V5XVtpXXx8MCkpOwogfWVsc2V7CiAgc3RhdGUubmFtZT0nVW50aXRsZWQgVm9pY2UnO3N0YXRlLnZvaWNlVHlwZT0nbWFsZSc7c3RhdGUuZnVuZGFtZW50YWw9MTMwO3N0YXRlLmN1cnJlbnRWb3dlbD0nYSc7c3RhdGUub3V0cHV0R2Fpbj0xO3N0YXRlLnZvd2VsR2FpbnM9e2E6MSxpOjEsdToxLGU6MSxvOjF9OwogIHN0YXRlLmhhcm1vbmljcz1BcnJheShNQVhfSEFSTU9OSUNTKS5maWxsKDApO3N0YXRlLmhhcm1vbmljc1swXT0xO3N0YXRlLnBoYXNlcz1BcnJheShNQVhfSEFSTU9OSUNTKS5maWxsKDApO3N0YXRlLnZvd2Vscz17YTpudWxsLGk6bnVsbCx1Om51bGwsZTpudWxsLG86bnVsbH07CiB9CiBvY3RhdmVTaGlmdD0wO2NvbW1pdFZvaWNlTmFtZShzdGF0ZS5uYW1lKTtzeW5jQ29udHJvbHMoKTt1cGRhdGVOb3RlQnV0dG9ucygpO3VwZGF0ZUhpc3RvcnlCdXR0b25zKCk7cmVuZGVyKCk7dXBkYXRlQXVkaW8oKTsKfQovLyBDb250aW51b3VzbHkgbWlycm9yIGVkaXRzIHRvIHRoZSBwYXJlbnQgYXBwOyB0aGlzIG1ha2VzIMOXIGEgY2xvc2UgYWN0aW9uLCBub3QgdGhlIG9ubHkgc2F2ZSBvcHBvcnR1bml0eS4KbGV0IHZvaWNlQXV0b3NhdmVRdWV1ZWQ9ZmFsc2U7CmZ1bmN0aW9uIHF1ZXVlVm9pY2VBdXRvc2F2ZSgpewogaWYodm9pY2VBdXRvc2F2ZVF1ZXVlZClyZXR1cm47IHZvaWNlQXV0b3NhdmVRdWV1ZWQ9dHJ1ZTsKIHNldFRpbWVvdXQoKCk9Pnt2b2ljZUF1dG9zYXZlUXVldWVkPWZhbHNlO3RyeXtwYXJlbnQucG9zdE1lc3NhZ2Uoe3R5cGU6J3ZvaWNlLXN5bnRoLWF1dG9zYXZlJyx2b2ljZTptYWtlVm9pY2VTeW50aFRyYW5zZmVyRGF0YSgpfSwnKicpO31jYXRjaChlcnIpe319LDApOwp9CmRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIoJ2lucHV0JyxxdWV1ZVZvaWNlQXV0b3NhdmUsdHJ1ZSk7CmRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIoJ2NoYW5nZScscXVldWVWb2ljZUF1dG9zYXZlLHRydWUpOwpkb2N1bWVudC5hZGRFdmVudExpc3RlbmVyKCdjbGljaycscXVldWVWb2ljZUF1dG9zYXZlLHRydWUpOwovLyBDYW52YXMvc3BlY3RydW0gZWRpdHMgY2FuIGJlIHBvaW50ZXItZHJpdmVuIGFuZCBtYXkgbm90IGVtaXQgaW5wdXQvY2hhbmdlLgpkb2N1bWVudC5hZGRFdmVudExpc3RlbmVyKCdwb2ludGVydXAnLHF1ZXVlVm9pY2VBdXRvc2F2ZSx0cnVlKTsKZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lcigndG91Y2hlbmQnLHF1ZXVlVm9pY2VBdXRvc2F2ZSx0cnVlKTsKZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lcigna2V5dXAnLHF1ZXVlVm9pY2VBdXRvc2F2ZSx0cnVlKTsKCndpbmRvdy5hZGRFdmVudExpc3RlbmVyKCdtZXNzYWdlJyxlPT57CiBpZihlLnNvdXJjZSE9PXBhcmVudHx8IWUuZGF0YSlyZXR1cm47CiBpZihlLmRhdGEudHlwZT09PSd2b2ljZS1zeW50aC1sb2FkJylhcHBseUluY29taW5nVm9pY2VTeW50aERhdGEoZS5kYXRhLnZvaWNlfHxudWxsKTsKIGlmKGUuZGF0YS50eXBlPT09J3ZvaWNlLXN5bnRoLWNvbW1pdCcpcGFyZW50LnBvc3RNZXNzYWdlKHt0eXBlOid2b2ljZS1zeW50aC1hcHBseScsdm9pY2U6bWFrZVZvaWNlU3ludGhUcmFuc2ZlckRhdGEoKX0sJyonKTsKfSk7Cjwvc2NyaXB0Pgo8L3NjcmlwdD4KPC9ib2R5Pgo8L2h0bWw+Cg==';
+function decodeVoiceSynthDocument(){
+  const bytes=Uint8Array.from(atob(voiceSynthDocumentBase64),c=>c.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
+}
+let voiceSynthEditorLoaded=false;
+let voiceSynthClosePending=false;
+let voiceSynthEditorTrackIndex=null;
+// Keep the latest editor payload per track as a same-session fallback. This prevents
+// a stale/null track payload from resetting the iframe when the dialog is reopened.
+const voiceSynthLastDataByTrack=new Map();
+function sendVoiceSynthDataToEditor(){
+  const frame=document.getElementById('voiceSynthFrame');
+  const trackIndex=voiceSynthEditorTrackIndex;
+  const tr=Number.isInteger(trackIndex)?song.tracks[trackIndex]:null;
+  const cached=Number.isInteger(trackIndex)?voiceSynthLastDataByTrack.get(trackIndex):null;
+  // The song track is the source of truth. The in-memory cache is only a fallback
+  // for older/temporarily missing track payloads; it must never override newer data.
+  const trackData=tr&&tr.instrumentType==='voice'?tr.voiceSynthData:null;
+  const data=trackData||cached||null;
+  if(trackData && Number.isInteger(trackIndex)){
+    voiceSynthLastDataByTrack.set(trackIndex,JSON.parse(JSON.stringify(trackData)));
+  }
+  try{frame.contentWindow.postMessage({type:'voice-synth-load',voice:data},'*');}catch(err){console.warn('Voice Synth設定を読み込めませんでした',err);}
+}
+function openVoiceSynthEditor(){
+  const frame=document.getElementById('voiceSynthFrame');
+  // Lock the target track for this editor session; other UI actions may change instPendingTrack.
+  voiceSynthEditorTrackIndex=instPendingTrack;
+  voiceSynthClosePending=false;
+  if(!voiceSynthEditorLoaded){
+    frame.addEventListener('load',()=>{sendVoiceSynthDataToEditor();},{once:true});
+    frame.srcdoc=decodeVoiceSynthDocument();voiceSynthEditorLoaded=true;
+  }else{sendVoiceSynthDataToEditor();}
+  openOverlay('voiceSynthEditorOverlay');
+}
+function commitAndCloseVoiceSynthEditor(){
+  const frame=document.getElementById('voiceSynthFrame');
+  if(!voiceSynthEditorLoaded){closeOverlay('voiceSynthEditorOverlay');return;}
+  // Wait for the iframe to return its latest state before closing. This prevents a
+  // quick reopen from sending stale track data back into the editor.
+  voiceSynthClosePending=true;
+  try{frame.contentWindow.postMessage({type:'voice-synth-commit'},'*');}
+  catch(err){console.warn(err);voiceSynthClosePending=false;closeOverlay('voiceSynthEditorOverlay');}
+}
+document.getElementById('voiceSynthEditorClose').onclick=commitAndCloseVoiceSynthEditor;
+document.getElementById('menuVoiceMode').onclick=()=>{
+  closeOverlay('menuOverlay');
+  const tr=song.tracks[song.activeTrack];
+  if(!tr||tr.instrumentType!=='voice'){showToast('Voice Synthのトラックを選択してください');return;}
+  instPendingTrack=song.activeTrack;
+  openVoiceModeDialog();
+};
+window.addEventListener('message',e=>{
+  if(e.source!==document.getElementById('voiceSynthFrame').contentWindow||!e.data||!['voice-synth-apply','voice-synth-autosave'].includes(e.data.type))return;
+  const trackIndex=voiceSynthEditorTrackIndex;
+  const tr=Number.isInteger(trackIndex)?song.tracks[trackIndex]:null;
+  if(!tr||tr.instrumentType!=='voice'||!e.data.voice)return;
+  // Always write to the track locked when the editor opened. Autosave means settings are
+  // already in the song model before × is tapped; apply remains as a final confirmation.
+  const copy=JSON.parse(JSON.stringify(e.data.voice));
+  tr.voiceSynthData=copy;
+  voiceSynthLastDataByTrack.set(trackIndex,JSON.parse(JSON.stringify(copy)));
+  tr.voiceSynthName=copy.name||'Untitled Voice';
+  voiceSynthWaveCache.clear();
+  if(e.data.type==='voice-synth-apply'){
+    if(voiceSynthClosePending){
+      voiceSynthClosePending=false;
+      closeOverlay('voiceSynthEditorOverlay');
+    }
+    showToast('Voice Synth設定を保存しました');
+  }
+});
+
 window.addEventListener('load', init);
 </script>
 <script>
