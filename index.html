@@ -106,6 +106,7 @@
   #trackWaveformLabel{font-size:11px;color:var(--text-dim);margin-bottom:4px;text-align:center;}
   #trackWaveformCanvas{width:100%;height:60px;display:block;background:#000;border-radius:4px;}
   #waveformViewBtn.active{background:var(--accent-dim);color:#fff;}
+  #effectsBtn.active{background:var(--accent-dim);color:#fff;}
   #voiceEditBtn.active{background:var(--accent-dim);color:#fff;}
   #voiceEditBtn[hidden]{display:none!important;}
   #voiceKanaOverlay .dialog{max-width:440px;}
@@ -206,7 +207,9 @@
   .mixch .bar.active{background:var(--rec);}
   .mixch .name{width:34px;font-size:13px;flex:0 0 auto;text-align:center;background:var(--bg-2);border-radius:6px;padding:6px 0;}
   .mixch .col{flex:1;min-width:0;}
-  .mixch .col .inst{font-size:11px;color:var(--text-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mixch .col .inst{font-size:11px;color:var(--text-dim);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+  .mixch .col .panRow{display:flex;align-items:center;gap:7px;margin-top:4px;font-size:11px;color:var(--text-dim);min-width:0;}
+  .mixch .col .panSlider{flex:1 1 auto;min-width:70px;width:100%;margin:0;}
   .mixch .valnum{width:46px;text-align:center;font-size:13px;color:var(--text);background:#000;border:1px solid var(--line);border-radius:6px;padding:5px 2px;}
   .mixch .msBtns{display:flex;flex-direction:column;gap:3px;}
   .mixch .msBtn{width:22px;height:20px;font-size:11px;font-weight:700;border-radius:4px;background:var(--bg-2);color:var(--text-dim);border:1px solid var(--line);}
@@ -249,6 +252,8 @@
     <button class="iconbtn" id="showOtherTracksBtn" title="他トラック表示">📔</button>
     <button class="iconbtn" id="pitchCurveBtn" title="ピッチカーブ編集">〜</button>
     <button class="iconbtn" id="waveformViewBtn" title="トラックの波形を表示">📈</button>
+    <button class="iconbtn" id="effectsBtn" title="トラックエフェクト">🎛️</button>
+    <button class="iconbtn" id="reverseBtn" title="選択ノーツをリバース">↩️</button>
     <button class="iconbtn" id="chordSuggestBtn" title="ベースからコード候補を表示">🎼</button>
     <button class="iconbtn" id="voiceEditBtn" title="ボイス編集" hidden>あ</button>
      <button class="iconbtn" id="panCurveBtn" title="PANオートメーション編集">↔</button>
@@ -355,6 +360,27 @@
   </div>
 </div>
 
+<div class="overlay hidden" id="effectsOverlay">
+  <div class="dialog" style="max-width:380px;">
+    <h3>トラックエフェクト</h3>
+    <div class="field">
+      <label><input type="checkbox" id="effectEchoOn"> エコー</label>
+      <label>ディレイ時間（秒）</label><input type="range" id="effectEchoTime" min="0.05" max="0.8" step="0.01" value="0.24">
+      <label>フィードバック</label><input type="range" id="effectEchoFeedback" min="0" max="0.85" step="0.01" value="0.3">
+      <label style="margin-top:12px;"><input type="checkbox" id="effectReverbOn"> リバーブ</label>
+      <label>残響の長さ</label><input type="range" id="effectReverbTime" min="0.2" max="5" step="0.1" value="1.8">
+      <label style="margin-top:12px;"><input type="checkbox" id="effectDistortionOn"> ディストーション</label>
+      <label>歪みの強さ</label><input type="range" id="effectDistortionAmount" min="0" max="1000" step="10" value="250">
+      <label style="margin-top:12px;"><input type="checkbox" id="effectTwistOn"> ねじれ</label>
+      <label>強度</label><input type="range" id="effectTwistStrength" min="0" max="100" step="1" value="100">
+      <label>バンド幅</label><input type="range" id="effectTwistBandwidth" min="100" max="5000" step="100" value="1200">
+      <label>ローパス</label><input type="range" id="effectTwistLowpass" min="200" max="18000" step="100" value="7000">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:8px;">設定は現在のトラックに適用されます。ねじれはバンドパスで音の帯域を絞り、ローパスで高音域をさらに抑える音色変化です。</div>
+    </div>
+    <div class="foot"><button data-close="effectsOverlay">閉じる</button><button id="effectsApplyBtn">適用</button></div>
+  </div>
+</div>
+
 <!-- Voice Synth: kana assignment keyboard -->
 <div class="overlay hidden" id="voiceKanaOverlay">
   <div class="dialog">
@@ -417,10 +443,11 @@
       <div class="menurow" id="projNew">新規</div>
       <div class="menurow" id="projOpen">開く (ファイルから読込)</div>
       <div class="menurow" id="projSaveAs">保存 (JSONダウンロード)</div>
+      <div class="menurow" id="projSaveMdsq">保存 (MidSequer2 .mdsq)</div>
       <div class="menurow" id="projImportMidi">既存のMIDIファイルを読み込む</div>
       <div class="menurow" id="projExportAudio">音声ファイルとして書き出す</div>
       <div class="menurow" id="projRename">プロジェクト名変更</div>
-      <input type="file" id="fileInput" accept="application/json" style="display:none">
+      <input type="file" id="fileInput" accept=".json,.mdsq,application/json,application/xml,text/xml" style="display:none">
       <input type="file" id="midiFileInput" accept=".mid,.midi,audio/midi" style="display:none">
       <input type="file" id="sf2FileInput" accept=".sf2,audio/x-soundfont" style="display:none">
     </div>
@@ -1506,6 +1533,18 @@ function drawGrid(){
       ctx.save();ctx.fillStyle=sel?'#14161b':'#10201e';ctx.font='bold '+Math.max(10,Math.min(16,rowH-4))+'px sans-serif';
       ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(nt.voiceChar,x+wpx/2,y+rowH/2,Math.max(8,wpx-3));ctx.restore();
     }
+    // Mark reverse-playback notes with a small reverse icon in the lower-right corner.
+    if(nt.reverse){
+      ctx.save();
+      const iconSize=Math.max(8,Math.min(11,rowH*.46));
+      ctx.font=iconSize+'px sans-serif';
+      ctx.textAlign='right'; ctx.textBaseline='bottom';
+      ctx.lineWidth=2; ctx.strokeStyle='rgba(15,20,28,.9)'; ctx.fillStyle='#ffffff';
+      const ix=x+wpx-3, iy=y+rowH-2;
+      ctx.strokeText('↩️',ix,iy);
+      ctx.fillText('↩️',ix,iy);
+      ctx.restore();
+    }
     if(tr.instrumentType==='voice' && tr.voiceEditMode==='extended' && Array.isArray(nt.voicePoints)){
       nt.voicePoints.forEach((pt,pi)=>{
         const px=x+Math.max(0,Math.min(1,pt.t||0))*wpx;
@@ -2251,16 +2290,51 @@ document.getElementById('redoBtn').onclick=()=>{
 /* ---- live preview while creating/dragging a note: sustained tone, retriggered on pitch
    change, stopped exactly when the finger lifts ---- */
 let livePreview=null;
+let livePreviewEchoRestoreTimer=null;
+let livePreviewEchoTrack=null;
+function suppressTrackEchoForLivePreview(trackIdx){
+  if(!actx || !trackNodes[trackIdx]) return;
+  const node=trackNodes[trackIdx];
+  if(!node.echoWet) return;
+  if(livePreviewEchoRestoreTimer) clearTimeout(livePreviewEchoRestoreTimer);
+  livePreviewEchoTrack=trackIdx;
+  // The live note preview shares the track bus, so mute its echo send and wet
+  // return for the gesture. The delayed return stays muted long enough for the
+  // delay line to flush, preventing the preview from echoing after finger-up.
+  node.echoSend.gain.setValueAtTime(0,actx.currentTime);
+  node.echoWet.gain.setValueAtTime(0,actx.currentTime);
+  node.feedback.gain.setValueAtTime(0,actx.currentTime);
+}
+function restoreTrackEchoAfterLivePreview(){
+  if(!actx || livePreviewEchoTrack==null) return;
+  const ti=livePreviewEchoTrack, node=trackNodes[ti], tr=song.tracks[ti];
+  livePreviewEchoTrack=null;
+  if(!node || !node.echoWet || !tr) return;
+  const fx=tr.effects||{};
+  const delaySeconds=Math.max(.05,Math.min(.8,Number(fx.echoTime)||.24));
+  if(livePreviewEchoRestoreTimer) clearTimeout(livePreviewEchoRestoreTimer);
+  livePreviewEchoRestoreTimer=setTimeout(()=>{
+    livePreviewEchoRestoreTimer=null;
+    if(!actx || !trackNodes[ti] || !trackNodes[ti].echoWet) return;
+    const now=actx.currentTime, current=trackNodes[ti];
+    current.echoSend.gain.setValueAtTime(1,now);
+    current.feedback.gain.setValueAtTime(Math.max(0,Math.min(.85,Number(fx.echoFeedback)||.3)),now);
+    current.echoWet.gain.setValueAtTime(.45,now);
+  },Math.ceil((delaySeconds+.03)*1000));
+}
 function startLivePreview(trackIdx, pitch){
   ensureAudio();
   stopLivePreview();
+  suppressTrackEchoForLivePreview(trackIdx);
   const handle = triggerNote(trackIdx, actx.currentTime, pitch, 100, 4.0, false);
   livePreview = handle || null;
 }
 function stopLivePreview(){
-  if(!livePreview) return;
-  try{ stopVoiceHandle(livePreview, actx.currentTime); }catch(err){ /* already ended */ }
-  livePreview=null;
+  if(livePreview){
+    try{ stopVoiceHandle(livePreview, actx.currentTime); }catch(err){ /* already ended */ }
+    livePreview=null;
+  }
+  restoreTrackEchoAfterLivePreview();
 }
 
 function onGridDown(e){
@@ -2292,10 +2366,11 @@ function onGridDown(e){
   if(hitNote){
     const noteStartX = tickToX(hitNote.startTick);
     const noteWidthPx = hitNote.lengthTick*view.pxPerTick;
-    // Split the note hit area into two equal halves: left half moves the note,
-    // right half adjusts its length. Keep this relative to the note's visible bounds.
+    // Keep the established interaction: the right half resizes note length,
+    // while the left half moves the note. Use the rendered note's actual bounds
+    // so imported MDSQ notes behave the same as notes created in this app.
     pointerDownInfo.action =
-      p.x >= noteStartX + noteWidthPx*0.5 ? 'resize' : 'move';
+      (noteWidthPx > 0 && p.x >= noteStartX + noteWidthPx * 0.5) ? 'resize' : 'move';
     return;
   }
 
@@ -2445,7 +2520,12 @@ function finishGridGesture(e){
 
   if(resizeInfo){
     stopResizeAutoscroll();
+    const resizedTrackIndex=song.activeTrack;
+    const resizedNoteIds=[...resizeInfo.ids];
     resizeInfo=null; drawGrid();
+    // Length is part of the reverse-buffer cache key. Warm the buffer for the
+    // new duration immediately after resizing so the next playback uses it.
+    prepareReversedBuffersForNotes(resizedTrackIndex,resizedNoteIds);
   } else if(dragMoveInfo){
     stopDragMoveAutoscroll();
     dragMoveInfo=null; drawGrid();
@@ -2746,6 +2826,10 @@ document.getElementById('waveformViewBtn').onclick=(e)=>{
   document.getElementById('trackWaveformPanel').classList.toggle('hidden', !trackWaveformViewOn);
   if(trackWaveformViewOn) startWaveformViewLoop(); else stopWaveformViewLoop();
 };
+const effectIds=['effectEchoOn','effectEchoTime','effectEchoFeedback','effectReverbOn','effectReverbTime','effectDistortionOn','effectDistortionAmount','effectTwistOn','effectTwistStrength','effectTwistBandwidth','effectTwistLowpass'];
+document.getElementById('effectsBtn').onclick=()=>{const tr=song.tracks[song.activeTrack];const f=tr.effects||{};document.getElementById('effectEchoOn').checked=!!f.echo;document.getElementById('effectEchoTime').value=f.echoTime??.24;document.getElementById('effectEchoFeedback').value=f.echoFeedback??.3;document.getElementById('effectReverbOn').checked=!!f.reverb;document.getElementById('effectReverbTime').value=f.reverbTime??1.8;document.getElementById('effectDistortionOn').checked=!!f.distortion;document.getElementById('effectDistortionAmount').value=f.distortionAmount??250;document.getElementById('effectTwistOn').checked=!!f.twist;document.getElementById('effectTwistStrength').value=f.twistStrength??100;document.getElementById('effectTwistBandwidth').value=f.twistBandwidth??1200;document.getElementById('effectTwistLowpass').value=f.twistLowpass??7000;openOverlay('effectsOverlay');};
+document.getElementById('effectsApplyBtn').onclick=()=>{const tr=song.tracks[song.activeTrack];tr.effects={echo:document.getElementById('effectEchoOn').checked,echoTime:+document.getElementById('effectEchoTime').value,echoFeedback:+document.getElementById('effectEchoFeedback').value,reverb:document.getElementById('effectReverbOn').checked,reverbTime:+document.getElementById('effectReverbTime').value,distortion:document.getElementById('effectDistortionOn').checked,distortionAmount:+document.getElementById('effectDistortionAmount').value,twist:document.getElementById('effectTwistOn').checked,twistStrength:+document.getElementById('effectTwistStrength').value,twistBandwidth:+document.getElementById('effectTwistBandwidth').value,twistLowpass:+document.getElementById('effectTwistLowpass').value};if(actx){stopAllVoices();buildTrackNodes();syncTrackNodesFromSong();}closeOverlay('effectsOverlay');if(playing)reschedulePlaybackNow();showToast('トラックエフェクトを適用しました');};
+document.getElementById('reverseBtn').onclick=(e)=>{if(!selection.size){showToast('リバースするノーツを選択してください');return;}const ti=song.activeTrack,tr=song.tracks[ti],before=snapshotNotes();let reversed=0;const warming=[];tr.notes.forEach(n=>{if(selection.has(n.id)){n.reverse=!n.reverse;reversed++;if(n.reverse){const dur=Math.max(.01,tickSpanSeconds(n.startTick,effectiveNoteEndTick(ti,n)));warming.push(makeReversedNoteBuffer(ti,n.pitch,n.velocity??100,dur,n.pitchCurve,resolveVibratoHz(n.vibrato,n.startTick),n.startTick,n.voiceChar));}}});pushUndoIfChanged(before);e.currentTarget.classList.remove('active');drawGrid();if(warming.length){showToast('リバース音声を事前生成中…');Promise.all(warming).then(results=>{if(results.every(Boolean))showToast('リバース音声の準備ができました');});}else showToast(reversed+'個のノーツのリバース状態を切り替えました');};
 let waveformZoom = 3;
 function startWaveformViewLoop(){
   if(waveformViewRAF) return;
@@ -3421,6 +3505,51 @@ document.getElementById('projSaveAs').onclick=()=>{
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
   closeOverlay('projectOverlay');
 };
+function xmlEscape(value){
+  return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+function buildMdsqXml(project){
+  // MidSequer2's MDSQ format only represents one tempo/time signature, 16 tracks,
+  // GM program, volume, and note events. Other app-only features are intentionally omitted.
+  const filename = ((project.name||'song').replace(/[\[\]\\/:*?"<>|]/g,'_').trim()||'song')+'.mdsq';
+  const bpmValue = project.tempoChanges?.[0]?.bpm ?? project.tempo ?? 120;
+  const bpm = Math.max(1,Math.min(999,Math.round(Number(bpmValue)||120)));
+  const ts = project.timeSigChanges?.[0] || {num:4,den:4};
+  const num = Math.max(1,Math.min(32,Math.round(Number(ts.num)||4)));
+  const den = Math.max(1,Math.min(32,Math.round(Number(ts.den)||4)));
+  const tickScale = PPQ/24;
+  const tracks = Array.from({length:16},(_,i)=>{
+    const tr = project.tracks?.[i] || newTrack(i);
+    // Track id 9 is the standard percussion track in MidSequer2.
+    const program = (i===9 || tr.instrument===-1 || tr.isDrum) ? 0 : Math.max(0,Math.min(127,Math.round(Number(tr.instrument)||0)));
+    const volume = Math.max(0,Math.min(127,Math.round(Number(tr.volume) || 0)));
+    const notes = (Array.isArray(tr.notes)?tr.notes:[]).map(n=>{
+      const pitch=Math.max(0,Math.min(127,Math.round(Number(n.pitch)||0)));
+      const velocity=Math.max(0,Math.min(127,Math.round(Number(n.velocity)||0)));
+      const start=Math.max(0,Math.round((Number(n.startTick)||0)/tickScale));
+      const duration=Math.max(1,Math.round((Number(n.lengthTick)||tickScale)/tickScale));
+      return `      <nt n="${pitch}" v="${velocity}" d="${duration}" t="${start}" />`;
+    }).join('\n');
+    return `    <trk id="${i}"><ini><inst pc="${program}" /><volume>${volume}</volume></ini><evts>${notes?'\n'+notes+'\n    ':''}</evts></trk>`;
+  }).join('\n');
+  const title=xmlEscape(project.name||'');
+  const safeFilename=xmlEscape(filename);
+  const created=new Date().toISOString();
+  return `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\n<midsequer_project><editstate><filename>${safeFilename}</filename><edited>false</edited></editstate><sng><meta><title>${title}</title><create_date>${created}</create_date></meta><data><mstr><tempo>${bpm}</tempo><tim_sig unit="${den}" times="${num}" /></mstr>\n${tracks}\n</data></sng></midsequer_project>`;
+}
+document.getElementById('projSaveMdsq').onclick=()=>{
+  try{
+    const xml=buildMdsqXml(song);
+    const blob=new Blob([xml],{type:'application/xml;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const filename=((song.name||'song').replace(/[\[\]\\/:*?"<>|]/g,'_').trim()||'song')+'.mdsq';
+    a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    closeOverlay('projectOverlay');
+  }catch(err){ alert('MDSQの書き出しに失敗しました: '+err.message); }
+};
 document.getElementById('projOpen').onclick=()=>document.getElementById('fileInput').click();
 function loadSongObject(newSongObj){
   if(typeof audioBufferCache!=='undefined')audioBufferCache.clear();
@@ -3433,18 +3562,78 @@ function loadSongObject(newSongObj){
   if(!Array.isArray(song.trackSettingMemory)) song.trackSettingMemory = Array.from({length:16}, ()=>null);
   while(song.trackSettingMemory.length<16) song.trackSettingMemory.push(null);
   song.tracks.forEach(tr=>{ if(!tr.timbreEvents) tr.timbreEvents=[]; if(!tr.fmMemorySlot) tr.fmMemorySlot=1; if(tr.sf2Key===undefined) tr.sf2Key=null; if(tr.sf2Name===undefined) tr.sf2Name=null; if(tr.sf2Bank===undefined) tr.sf2Bank=0; if(tr.sf2Program===undefined) tr.sf2Program=(tr.instrument>=0?tr.instrument:0); });
+  // Imported MDSQ notes carry explicit IDs. Track 1's IDs start at 1, which can
+  // collide with noteIdSeq (also initially 1) when a new note is created; the
+  // drag code then finds the older note with the same ID and appears not to move
+  // the newly-created one. Advance the allocator beyond every loaded numeric ID.
+  const maxLoadedNoteId = song.tracks.reduce((max,tr)=>Math.max(max,...tr.notes.map(nt=>Number.isFinite(Number(nt.id))?Number(nt.id):0)),0);
+  noteIdSeq = Math.max(noteIdSeq, Math.floor(maxLoadedNoteId)+1);
   resetMeasureCache(); invalidateTempoCache(); invalidateVoiceStealCache(); selection.clear(); clipboard=[]; undoStack=[]; redoStack=[];
   syncTrackNodesFromSong();
   closeOverlay('projectOverlay');
   drawAll();
   rehydrateAudioBuffers();
 }
+function parseMdsqProject(xmlText, fileName){
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if(doc.querySelector('parsererror')) throw new Error('MDSQのXMLを解析できませんでした');
+  const root = doc.documentElement;
+  if(!root || root.tagName !== 'midsequer_project') throw new Error('MidSequer2の.mdsqプロジェクトではありません');
+  const data = root.querySelector('sng > data');
+  if(!data) throw new Error('プロジェクトデータが見つかりません');
+  const mstr = data.querySelector('mstr');
+  const tempo = Math.max(1, Number(mstr?.querySelector('tempo')?.textContent) || 120);
+  const ts = mstr?.querySelector('tim_sig');
+  const num = Math.max(1, Number(ts?.getAttribute('times')) || 4);
+  const den = Math.max(1, Number(ts?.getAttribute('unit')) || 4);
+  const result = newSong();
+  result.name = (root.querySelector('sng > meta > title')?.textContent || '').trim() || (fileName || 'song').replace(/\\.mdsq$/i,'');
+  result.tempo = tempo;
+  result.tempoChanges = [{tick:0,bpm:tempo}];
+  result.timeSigChanges = [{measure:1,num,den}];
+  // MidSequer2 stores note positions in 24 ticks per quarter; this app uses PPQ=480.
+  const tickScale = PPQ / 24;
+  const sourceTracks = Array.from(data.querySelectorAll(':scope > trk'));
+  sourceTracks.forEach((src, idx)=>{
+    const tr = result.tracks[idx];
+    if(!tr) return;
+    tr.name = 'Track ' + (idx + 1);
+    const inst = src.querySelector('ini > inst');
+    // MidSequer2's 10th track (MIDI channel 10 / track id 9) is percussion.
+    // A program number of 0 here is only a placeholder, not a piano instrument.
+    const sourceTrackId = Number(src.getAttribute('id'));
+    if(idx === 9 || sourceTrackId === 9) {
+      tr.instrument = -1;
+      tr.isDrum = true;
+    } else if(inst && inst.hasAttribute('pc')) {
+      tr.instrument = Math.max(0, Math.min(127, Number(inst.getAttribute('pc')) || 0));
+      tr.isDrum = false;
+    }
+    // This app stores track volume on the MIDI-style 0–127 scale. MDSQ's
+    // <volume> is already on that scale, so keep the integer value directly.
+    const vol = Number(src.querySelector('ini > volume')?.textContent);
+    if(Number.isFinite(vol)) tr.volume = Math.round(Math.max(0, Math.min(127, vol)));
+    tr.notes = Array.from(src.querySelectorAll('evts > nt')).map((n, ni)=>{
+      const pitch = Number(n.getAttribute('n'));
+      const velocity = Number(n.getAttribute('v'));
+      const duration = Number(n.getAttribute('d'));
+      const start = Number(n.getAttribute('t'));
+      if(![pitch, velocity, duration, start].every(Number.isFinite)) return null;
+      return {id: idx * 1000000 + ni + 1, pitch:Math.max(0,Math.min(127,pitch)), velocity:Math.max(0,Math.min(127,velocity)), startTick:Math.max(0,start*tickScale), lengthTick:Math.max(1,duration*tickScale)};
+    }).filter(Boolean);
+  });
+  return result;
+}
 document.getElementById('fileInput').onchange=(e)=>{
   const f = e.target.files[0]; if(!f) return;
   const reader = new FileReader();
   reader.onload = ()=>{
-    try{ loadSongObject(JSON.parse(reader.result)); }
-    catch(err){ alert('読み込みに失敗しました: '+err.message); }
+    try{
+      const content = String(reader.result || '');
+      const isMdsq = /\\.mdsq$/i.test(f.name) || content.trimStart().startsWith('<?xml') || content.includes('<midsequer_project');
+      const loaded = isMdsq ? parseMdsqProject(content, f.name) : JSON.parse(content);
+      loadSongObject(loaded);
+    } catch(err){ alert('読み込みに失敗しました: '+err.message); }
   };
   reader.readAsText(f);
   e.target.value='';
@@ -3814,13 +4003,13 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
   }
   song.tracks.forEach((tr,ti)=>{
     const audible=anySolo?tr.solo:!tr.muted;
-    const type=tr.instrumentType==='fm'?6:tr.instrumentType==='synth'?5:2;
+    const type=tr.instrumentType==='fm'?6:tr.instrumentType==='synth'?5:tr.instrumentType==='voice'?7:2;
     let wave=null;
     if(type===5) wave=(getActiveWaveformSamples(tr)||defaultRetroWaveform()).slice();
     const pan=(tr.pan||0)/100, a=(pan+1)*Math.PI/4;
     const panPoints=sortedPanPoints(tr).map(pt=>({tick:pt.tick,pan:Math.max(-100,Math.min(100,pt.pan||0))}));
     const volumePoints=sortedVolumePoints(tr).map(pt=>({tick:pt.tick,volume:Math.max(0,Math.min(127,pt.volume??100))}));
-    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',gain:audible?tr.volume/127:0,volume:tr.volume??100,volumePoints,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),panPoints,wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0,adsr:tr.instrumentType!=='fm'&&tr.instrument!==-1&&tr.adsr?{...tr.adsr}:null};
+    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',voiceSynthData:tr.instrumentType==='voice'?(tr.voiceSynthData||null):null,gain:audible?tr.volume/127:0,volume:tr.volume??100,volumePoints,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),panPoints,wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0,adsr:tr.instrumentType!=='fm'&&tr.instrument!==-1&&tr.adsr?{...tr.adsr}:null};
     tr.notes.forEach(nt=>{
       const endTick=effectiveNoteEndTick(ti,nt);
       const when=leadSeconds+tickToSeconds(nt.startTick);
@@ -3829,7 +4018,8 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
       // sample source alive for the same fixed 300 ms release used by
       // sf2Voice(), so the low-level renderer extends the PCM work separately
       // when it mixes an SF2 voice.
-      const n={s:Math.floor(when*sampleRate),d:Math.floor((when+dur)*sampleRate),len:dur,p:nt.pitch,v:nt.velocity??100};
+      const n={s:Math.floor(when*sampleRate),d:Math.floor((when+dur)*sampleRate),len:dur,p:nt.pitch,v:nt.velocity??100,reverse:!!nt.reverse,_sourceNote:nt,_trackIndex:ti};
+      if(type===7) n.vowel=voiceSynthVowelKey(nt.voiceChar,tr.voiceSynthData||{});
       if(nt.pitchCurve&&nt.pitchCurve.length>=2) n.c=nt.pitchCurve.map(pt=>[pt.t*dur,pt.semi]);
       const vib=resolveVibratoHz(nt.vibrato,nt.startTick);
       if(vib) n.b=[vib.depth,vib.speed,vib.delay];
@@ -3886,6 +4076,7 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
   const buffer=actx.createBuffer(2,totalFrames,sampleRate);
   const L=buffer.getChannelData(0), R=buffer.getChannelData(1);
   const sr=sampleRate;
+  let trackL=null, trackR=null, currentSongTrackIndex=-1;
 
   function pitchMulAt(note,age){
     let semi=0;
@@ -3948,6 +4139,48 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
     return wave[i]*(1-f)+wave[(i+1)%n]*f;
   }
 
+  // Voice Synth's harmonic spectra are rendered into a reusable wavetable once
+  // per vowel. This keeps export on the fast PCM path instead of forcing the
+  // entire song through OfflineAudioContext just to render vowels.
+  const voiceTableCache=new Map();
+  function voiceTableFor(tr,vowel,trackIndex,maxHarmonic){
+    const data=tr.voiceSynthData;
+    if(!data)return null;
+    const raw=(Array.isArray(data.vowels?.[vowel])&&data.vowels[vowel].some(x=>Number(x)>0))?data.vowels[vowel]:data.harmonics;
+    if(!Array.isArray(raw)||!raw.some(x=>Number(x)>0))return null;
+    const amps=raw.slice(0,256).map(x=>Math.max(0,Math.min(1,Number(x)||0)));
+    const phases=Array.isArray(data.phases)?data.phases:[];
+    const harmonicLimit=Math.max(1,Math.min(amps.length,Number.isFinite(maxHarmonic)?Math.floor(maxHarmonic):amps.length));
+    const key=trackIndex+':'+vowel+':'+harmonicLimit+':'+JSON.stringify(amps)+':'+JSON.stringify(phases.slice(0,amps.length));
+    if(voiceTableCache.has(key))return voiceTableCache.get(key);
+    const size=2048, table=new Float32Array(size);
+    // Web Audio normalizes the complete PeriodicWave before its frequency-dependent
+    // band-limiting. Do the same here: calculate the reference peak from every
+    // configured harmonic, then apply that same scale to the band-limited table.
+    // Normalizing only the remaining harmonics makes vowels with different spectra
+    // jump in loudness at export compared with live piano-roll playback.
+    let referencePeak=0;
+    for(let j=0;j<size;j++){
+      const phase=2*Math.PI*j/size;
+      let fullValue=0;
+      for(let h=0;h<amps.length;h++){
+        if(amps[h]===0)continue;
+        fullValue+=amps[h]*Math.sin((h+1)*phase+(Number(phases[h])||0)*Math.PI/180);
+      }
+      referencePeak=Math.max(referencePeak,Math.abs(fullValue));
+      let value=0;
+      for(let h=0;h<harmonicLimit;h++){
+        if(amps[h]===0)continue;
+        value+=amps[h]*Math.sin((h+1)*phase+(Number(phases[h])||0)*Math.PI/180);
+      }
+      table[j]=value;
+    }
+    // Preserve the complete-wave normalization after high-frequency harmonics are removed.
+    if(referencePeak>1e-12)for(let j=0;j<size;j++)table[j]/=referencePeak;
+    voiceTableCache.set(key,table);
+    return table;
+  }
+
   function panAtTickCfg(tr,tick){
     const pts=tr.panPoints;
     if(!pts || !pts.length) return tr.pan||0;
@@ -3976,8 +4209,9 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
     return [Math.cos(a)*vol*(tr.gain>0?1:0), Math.sin(a)*vol*(tr.gain>0?1:0)];
   }
   function addSample(idx,x,panL,panR){
-    L[idx]+=x*panL;
-    R[idx]+=x*panR;
+    if(!trackL || idx<0 || idx>=totalFrames) return;
+    trackL[idx]+=x*panL;
+    trackR[idx]+=x*panR;
   }
   // Built-in GM timbre engine for the default MIDI preset bank.
   // This intentionally does NOT use SF2.  Each GM program gets a compact
@@ -4228,8 +4462,10 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
   }
 
   let processedTracks=0;
-  for(const tr of cfg.tracks){
-    const pan=tr.pan||0;
+  for(let trackIndex=0;trackIndex<cfg.tracks.length;trackIndex++){
+    const tr=cfg.tracks[trackIndex];
+    currentSongTrackIndex=trackIndex;
+    trackL=new Float32Array(totalFrames); trackR=new Float32Array(totalFrames);
     const notes=tr.notes;
 
     for(let ni=0;ni<notes.length;ni++){
@@ -4238,6 +4474,28 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
       const start=Math.max(0,n.s|0), end=Math.min(totalFrames,n.d|0);
       if(end<=start) continue;
       const dur=n.len||((end-start)/sr);
+      if(n.reverse && n._sourceNote){
+        // Reverse-only projects can spend most of their render time preparing
+        // reversed buffers. Publish progress BEFORE awaiting that work, and yield
+        // so the UI can paint the bar even when the project has just one note.
+        const noteProgress=(processedTracks+(ni/Math.max(1,notes.length)))/Math.max(1,cfg.tracks.length);
+        setExportProgress('リバース音声を準備・ミキシング中...',Math.min(.94,Math.max(.02,noteProgress)));
+        await new Promise(r=>setTimeout(r,0));
+        const srcNote=n._sourceNote, originalTrack=song.tracks[n._trackIndex];
+        const rev=await makeReversedNoteBuffer(n._trackIndex,srcNote.pitch,srcNote.velocity??100,dur,srcNote.pitchCurve,resolveVibratoHz(srcNote.vibrato,n.startTick),srcNote.startTick,srcNote.voiceChar);
+        if(rev){
+          const targetEnd=Math.min(totalFrames,end), desiredStart=targetEnd-rev.length;
+          const from=Math.max(0,desiredStart), offset=Math.max(0,-desiredStart), count=Math.min(rev.length-offset,totalFrames-from);
+          const vl=rev.getChannelData(0), vr=rev.numberOfChannels>1?rev.getChannelData(1):vl;
+          for(let k=0;k<count;k++){
+            const fr=from+k, pg=panGainsAtFrame(tr,fr), v=(vl[offset+k]+vr[offset+k])*.5;
+            addSample(fr,v,pg[0],pg[1]);
+          }
+        }
+        setExportProgress('リバース音声をミキシング中...',Math.min(.94,(processedTracks+((ni+1)/Math.max(1,notes.length)))/Math.max(1,cfg.tracks.length)));
+        await new Promise(r=>setTimeout(r,0));
+        continue;
+      }
       const vel=n.v||100;
       const pitch=440*Math.pow(2,(n.p-69)/12);
       const kind=tr.type;
@@ -4373,6 +4631,47 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
             { const pg=panGainsAtFrame(tr,fr); addSample(fr,gmTimbre(program,phase,pitch*pm,age,dur,vel)*gmEnvelope(program,age,dur,vel),pg[0],pg[1]); }
           }
         }
+      }else if(kind===7){
+        const data=tr.voiceSynthData;
+        // Band-limit the additive voice spectrum to the note's highest possible
+        // instantaneous pitch. Unfiltered upper harmonics fold below Nyquist and
+        // are perceived as gritty/buzzy noise, especially on high notes.
+        let maxPitchMul=1;
+        if(n.c&&n.c.length){for(const point of n.c){const semi=Number(point?.[1])||0;maxPitchMul=Math.max(maxPitchMul,Math.pow(2,semi/12));}}
+        if(n.b&&n.b[0])maxPitchMul*=Math.pow(2,Math.abs(Number(n.b[0])||0)/12);
+        const maxHarmonic=Math.max(1,Math.floor((sr*0.45)/(pitch*maxPitchMul)));
+        const table=voiceTableFor(tr,n.vowel||'a',cfg.tracks.indexOf(tr),maxHarmonic);
+        if(!table)continue;
+        const dataGain=Math.max(0,Math.min(8,Number(data.outputGain??1)));
+        const vowelGain=Math.max(0,Math.min(8,Number(data.vowelGains?.[n.vowel||'a']??1)));
+        const peak=Math.max(.05,Math.min(1,vel/127))*.28*dataGain*vowelGain;
+        const ae=tr.adsr;
+        const atk=ae?Math.max(.002,ae.attack):.008;
+        const dec=ae?Math.max(.002,ae.decay):.01;
+        const sus=ae?Math.max(0,Math.min(1,ae.sustain)):.7;
+        const rel=ae?Math.max(.01,ae.release):Math.min(.18,Math.max(.06,dur*.35));
+        const releaseStart=ae?Math.max(atk+dec,dur):Math.max(atk,dur-rel);
+        const renderEnd=Math.min(totalFrames,Math.ceil(start+(releaseStart+rel+.04)*sr));
+        const tableSize=table.length, phaseStep=2*Math.PI/sr;
+        let phase=0;
+        for(let fr=start;fr<renderEnd;fr++){
+          const age=(fr-start)/sr, pm=pitchMulAt(n,age);
+          phase=(phase+phaseStep*pitch*pm)%(2*Math.PI);
+          const x=phase/(2*Math.PI)*tableSize, ix=Math.floor(x), frac=x-ix;
+          const smp=table[ix]*(1-frac)+table[(ix+1)%tableSize]*frac;
+          let env=0;
+          if(ae){
+            if(age<atk)env=peak*age/atk;
+            else if(age<atk+dec)env=peak+(peak*sus-peak)*((age-atk)/dec);
+            else if(age<releaseStart)env=peak*sus;
+            else if(age<releaseStart+rel)env=peak*sus*Math.pow(.0001/Math.max(.0001,peak*sus),(age-releaseStart)/rel);
+          }else{
+            if(age<atk)env=peak*age/atk;
+            else if(age<releaseStart)env=peak;
+            else if(age<releaseStart+rel)env=peak*Math.pow(.0001/Math.max(.0001,peak),(age-releaseStart)/rel);
+          }
+          const pg=panGainsAtFrame(tr,fr);addSample(fr,smp*env,pg[0],pg[1]);
+        }
       }else if(kind===6){
         // FM Synth PCM renderer.
         // Keep the original, known-good preset representation (ops/order/
@@ -4491,6 +4790,58 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
         await new Promise(r=>setTimeout(r,0));
       }
     }
+    // Apply the same per-track effects during PCM export without creating one Web Audio node per note.
+    const fx=(song.tracks[trackIndex]?.effects)||{};
+    const nFrames=totalFrames;
+    let xL=trackL, xR=trackR;
+    if(fx.twist){
+      const strength=Math.max(0,Math.min(100,Number(fx.twistStrength??100)))/100;
+      const bandwidth=Math.max(100,Math.min(5000,Number(fx.twistBandwidth)||1200));
+      const q=Math.max(.25,Math.min(18,2400/bandwidth));
+      const lp=Math.max(200,Math.min(18000,Number(fx.twistLowpass)||7000));
+      const processFilter=(src,type,freq,Q)=>{
+        const out=new Float32Array(nFrames); const w0=2*Math.PI*freq/sr, alpha=Math.sin(w0)/(2*Q), cos=Math.cos(w0);
+        let b0,b1,b2,a0=1+alpha,a1=-2*cos,a2=1-alpha;
+        if(type==='bandpass'){b0=alpha;b1=0;b2=-alpha;}else{b0=(1-cos)/2;b1=1-cos;b2=(1-cos)/2;}
+        b0/=a0;b1/=a0;b2/=a0;a1/=a0;a2/=a0;
+        let xx1=0,xx2=0,yy1=0,yy2=0;
+        for(let i=0;i<nFrames;i++){const xx=src[i], yy=b0*xx+b1*xx1+b2*xx2-a1*yy1-a2*yy2;out[i]=Number.isFinite(yy)?yy:0;xx2=xx1;xx1=xx;yy2=yy1;yy1=out[i];}
+        return out;
+      };
+      const lowpassComp=lp<7000?Math.sqrt(7000/lp):1, bandwidthComp=Math.sqrt(1200/bandwidth);
+      const autoGain=1+strength*Math.min(1.5,Math.max(0,bandwidthComp*lowpassComp-1));
+      for(let ch=0;ch<2;ch++){
+        const src=ch?xR:xL, bp=processFilter(src,'bandpass',2400,q), filtered=processFilter(bp,'lowpass',lp,.707), dst=new Float32Array(nFrames);
+        for(let i=0;i<nFrames;i++)dst[i]=((1-strength)*src[i]+strength*filtered[i])*autoGain;
+        if(ch)xR=dst;else xL=dst;
+      }
+    }
+    if(fx.distortion){
+      const amount=Math.max(0,Math.min(1000,Number(fx.distortionAmount)||250)), drive=1+amount/100;
+      const comp=1/Math.sqrt(1+amount/180);
+      for(let i=0;i<nFrames;i++){xL[i]=(drive*xL[i]/(1+amount/100*Math.abs(xL[i])))*comp;xR[i]=(drive*xR[i]/(1+amount/100*Math.abs(xR[i])))*comp;}
+    }
+    if(fx.echo){
+      const delayFrames=Math.max(1,Math.round(Math.max(.05,Math.min(.8,Number(fx.echoTime)||.24))*sr));
+      const feedback=Math.max(0,Math.min(.85,Number(fx.echoFeedback)||.3));
+      const wetL=new Float32Array(nFrames), wetR=new Float32Array(nFrames);
+      for(let i=delayFrames;i<nFrames;i++){wetL[i]=xL[i-delayFrames]+wetL[i-delayFrames]*feedback;wetR[i]=xR[i-delayFrames]+wetR[i-delayFrames]*feedback;}
+      for(let i=0;i<nFrames;i++){xL[i]+=wetL[i]*.45;xR[i]+=wetR[i]*.45;}
+    }
+    if(fx.reverb){
+      // Lightweight multi-tap feedback reverb approximating the live convolution send.
+      const decay=Math.max(.2,Math.min(5,Number(fx.reverbTime)||1.8));
+      const taps=[.0297,.0371,.0411,.0437].map(v=>Math.max(1,Math.round(v*sr)));
+      const wetL=new Float32Array(nFrames),wetR=new Float32Array(nFrames);
+      for(let i=0;i<nFrames;i++){
+        let l=0,r=0; for(let j=0;j<taps.length;j++){const d=taps[j];if(i>=d){l+=xL[i-d]*(.16/(j+1));r+=xR[i-d]*(.16/(j+1));}}
+        wetL[i]=l;wetR[i]=r;
+      }
+      const wetGain=.35*Math.min(1.5,decay/1.8);
+      for(let i=0;i<nFrames;i++){xL[i]+=wetL[i]*wetGain;xR[i]+=wetR[i]*wetGain;}
+    }
+    for(let i=0;i<nFrames;i++){L[i]+=xL[i];R[i]+=xR[i];}
+    trackL=null;trackR=null;
     processedTracks++;
   }
 
@@ -4511,11 +4862,24 @@ async function legacyOfflineRender(totalSeconds, sampleRate, leadSeconds){
   actx = offlineCtx;
   masterGain = offlineCtx.createGain(); masterGain.gain.value=0.9; masterGain.connect(offlineCtx.destination);
   buildTrackNodes(false);
-  song.tracks.forEach((tr,ti)=>tr.notes.forEach(nt=>{
-    const when=leadSeconds+tickToSeconds(nt.startTick);
-    const dur=Math.max(.01,tickSpanSeconds(nt.startTick,effectiveNoteEndTick(ti,nt)));
-    triggerNote(ti,when,nt.pitch,nt.velocity??100,dur,false,nt.pitchCurve,resolveVibratoHz(nt.vibrato,nt.startTick),nt.startTick);
-  }));
+  for(let ti=0;ti<song.tracks.length;ti++){
+    const tr=song.tracks[ti];
+    for(const nt of tr.notes){
+      const when=leadSeconds+tickToSeconds(nt.startTick);
+      const dur=Math.max(.01,tickSpanSeconds(nt.startTick,effectiveNoteEndTick(ti,nt)));
+      if(nt.reverse){
+        // Prepare reverse buffers before startRendering so every source is scheduled in time.
+        const rev=await makeReversedNoteBuffer(ti,nt.pitch,nt.velocity??100,dur,nt.pitchCurve,resolveVibratoHz(nt.vibrato,nt.startTick),nt.startTick,nt.voiceChar);
+        if(rev && trackNodes[ti]){
+          const targetEnd=when+dur, desiredStart=targetEnd-rev.duration;
+          const startAt=Math.max(desiredStart,offlineCtx.currentTime+.005), offset=Math.max(0,startAt-desiredStart);
+          if(offset<rev.duration){const src=offlineCtx.createBufferSource();src.buffer=rev;src.connect(trackNodes[ti].gain);src.start(startAt,offset);}
+        }
+      }else{
+        triggerNote(ti,when,nt.pitch,nt.velocity??100,dur,false,nt.pitchCurve,resolveVibratoHz(nt.vibrato,nt.startTick),nt.startTick,nt.voiceChar);
+      }
+    }
+  }
   // Keep the exact same OfflineAudioContext rendering path, but briefly
   // suspend it at coarse intervals so the UI can receive progress updates.
   // These are intentionally sparse (500ms of audio per update) to keep the
@@ -4574,7 +4938,13 @@ document.getElementById('exportAudioGo').onclick=async ()=>{
     const leadSeconds=leadTicks/PPQ*(60/tempoAtTick(0));
     const contentSeconds=tickToSeconds(contentEndTick);
     const trailSeconds=trailTicks/PPQ*(60/tempoAtTick(contentEndTick));
-    const totalSeconds=Math.max(.5,leadSeconds+contentSeconds+trailSeconds);
+    const effectTailSeconds=Math.max(0,...song.tracks.map(t=>{
+      const fx=t.effects||{}; let tail=0;
+      if(fx.echo){const dt=Math.max(.05,Math.min(.8,Number(fx.echoTime)||.24)),fb=Math.max(0,Math.min(.85,Number(fx.echoFeedback)||.3));tail=Math.max(tail,fb>0?Math.min(8,dt*(1+Math.ceil(Math.log(.001)/Math.log(fb)))):dt);}
+      if(fx.reverb)tail=Math.max(tail,Math.max(.2,Math.min(5,Number(fx.reverbTime)||1.8)));
+      return tail;
+    }));
+    const totalSeconds=Math.max(.5,leadSeconds+contentSeconds+trailSeconds+effectTailSeconds);
     const sampleRate=44100;
     // FM must be rendered by the same Web Audio graph used for live playback.
     // The low-level PCM FM integrator can accumulate a small pitch error because
@@ -4588,6 +4958,7 @@ document.getElementById('exportAudioGo').onclick=async ()=>{
       setExportProgress('FM SynthをWeb Audioと同じ方式でレンダリング中...',.02);
       rendered=await legacyOfflineRender(totalSeconds,sampleRate,leadSeconds);
     }else{
+      setExportProgress(song.tracks.some(t=>t.instrumentType==='voice' && t.notes && t.notes.length) ? 'Voice Synthの母音を高速レンダリング中...' : '低レベルミキサーでレンダリング中...',.02);
       rendered=await renderLowLevelMix(totalSeconds,sampleRate,leadSeconds);
       if(!rendered){
         setExportProgress('互換レンダラーに切り替え中...',.02);
@@ -4870,15 +5241,28 @@ function renderInstList(){
   const body = document.getElementById('instListBody');
   body.innerHTML='';
   document.getElementById('instCatCurrent').textContent = instCatFilter===-1 ? '- All -' : GM_CATEGORIES[instCatFilter];
+  // Render melodic GM programs first; the separate GM percussion kit is always last.
+  const tr = song.tracks[instPendingTrack];
   GM_INSTRUMENTS.forEach((name,idx)=>{
     if(instCatFilter!==-1 && catOfInstrument(idx)!==instCatFilter) return;
     const row=document.createElement('div'); row.className='listrow';
-    const tr = song.tracks[instPendingTrack];
     if(tr.instrumentType==='preset' && tr.instrument===idx) row.classList.add('selected');
     row.innerHTML = `<div style="display:flex;align-items:center;"><span class="dot"></span>${String(idx).padStart(3,'0')}:${name}</div>`;
-    row.onclick=()=>{ tr.instrument=idx; tr.instrumentType='preset'; renderInstList(); reschedulePlaybackNow(); };
+    row.onclick=()=>{ tr.instrument=idx; tr.instrumentType='preset'; tr.isDrum=false; renderInstList(); updateTrackGridUI(); reschedulePlaybackNow(); };
     body.appendChild(row);
   });
+  // Drum kit is a separate GM percussion bank (bank 128), not a melodic GM program.
+  if(instCatFilter===-1 || instCatFilter===14){
+    const drumRow=document.createElement('div'); drumRow.className='listrow';
+    if(tr.instrument===-1 && tr.instrumentType==='preset') drumRow.classList.add('selected');
+    drumRow.innerHTML='<div style="display:flex;align-items:center;"><span class="dot"></span>Drum Kit（プリセット）</div><span class="sub">GM Bank 128</span>';
+    drumRow.onclick=()=>{
+      tr.instrument=-1; tr.instrumentType='preset'; tr.isDrum=true;
+      delete periodicWaveCache[instPendingTrack];
+      renderInstList(); updateTrackGridUI(); reschedulePlaybackNow();
+    };
+    body.appendChild(drumRow);
+  }
 }
 function renderSynthPane(){
   const body = document.getElementById('instSynthPane');
@@ -5650,7 +6034,8 @@ function openMixer(){
       </div>
       <div class="col">
         <input type="range" min="0" max="127" value="${tr.volume}" class="volSlider">
-        <div class="inst">${instName} &nbsp;|&nbsp; Pan <input type="range" min="-100" max="100" value="${tr.pan}" class="panSlider" style="width:70px;vertical-align:middle;"></div>
+        <div class="inst" title="${instName.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${instName}</div>
+        <div class="panRow"><span>Pan</span><input type="range" min="-100" max="100" value="${tr.pan}" class="panSlider"></div>
       </div>
       <input type="number" class="valnum" min="0" max="127" inputmode="numeric" value="${tr.volume}">`;
     const volEl = row.querySelector('.volSlider');
@@ -6288,11 +6673,17 @@ function getVoiceSynthPeriodicWave(trackIdx, vowel){
     ? data.vowels[vowel] : data.harmonics;
   if(!Array.isArray(raw)||!raw.some(x=>Number(x)>0)) return null;
   const amps=raw.slice(0,256).map(x=>Math.max(0,Math.min(1,Number(x)||0)));
-  const key=trackIdx+':'+vowel+':'+JSON.stringify(amps);
+  const phases=Array.isArray(data.phases)?data.phases:[];
+  const phaseSlice=phases.slice(0,amps.length);
+  const key=trackIdx+':'+vowel+':'+JSON.stringify(amps)+':'+JSON.stringify(phaseSlice);
   if(voiceSynthWaveCache.has(key)) return voiceSynthWaveCache.get(key);
   const count=amps.length+1;
   const real=new Float32Array(count), imag=new Float32Array(count);
-  for(let i=0;i<amps.length;i++) real[i+1]=amps[i];
+  for(let i=0;i<amps.length;i++){
+    const ph=(Number(phases[i])||0)*Math.PI/180;
+    real[i+1]=amps[i]*Math.sin(ph);
+    imag[i+1]=amps[i]*Math.cos(ph);
+  }
   let wave;
   try{ wave=actx.createPeriodicWave(real,imag,{disableNormalization:false}); }
   catch(err){ console.warn('Voice Synth waveform failed',err); return null; }
@@ -6334,6 +6725,107 @@ function voiceSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, v
   const handle={src:osc,g};
   if(register) activeVoices.push(handle);
   return handle;
+}
+
+// Render an individual note to an AudioBuffer, then reverse its samples for true tape-style reverse playback.
+const reverseBufferCache = new Map();
+function reverseCacheKey(trackIdx,note,vel,dur,pitchCurve,vibrato,noteTick,voiceChar){
+  const tr=song.tracks[trackIdx];
+  return [trackIdx,tr.instrumentType,tr.instrument, note,vel,Math.round(dur*1000),JSON.stringify(pitchCurve||null),vibrato||0,noteTick||0,voiceChar||'',JSON.stringify(tr.adsr||null),tr.fmMemorySlot||0].join('|');
+}
+async function makeReversedNoteBuffer(trackIdx,note,vel,dur,pitchCurve,vibrato,noteTick,voiceChar){
+  const key=reverseCacheKey(trackIdx,note,vel,dur,pitchCurve,vibrato,noteTick,voiceChar);
+  if(reverseBufferCache.has(key)) return reverseBufferCache.get(key);
+  const promise=(async()=>{
+    const sr=(actx&&actx.sampleRate)||44100;
+    const tr=song.tracks[trackIdx];
+    const release=Math.max(.25,Number(tr.adsr?.release)||.3);
+    const total=Math.max(.25,Math.min(12,dur+release+.12));
+    const off=new OfflineAudioContext(2,Math.ceil(total*sr),sr);
+    const realActx=actx, realMaster=masterGain, realNodes=trackNodes, realVoices=activeVoices;
+    const savedWaveCache=periodicWaveCache; periodicWaveCache={};
+    try{
+      actx=off;
+      const out=off.createGain(); out.gain.value=1; out.connect(off.destination);
+      masterGain=out;
+      // Route synthesized note directly to the offline output; do not bake track pan/volume/effects into the reversed sample.
+      trackNodes=song.tracks.map(()=>({gain:out}));
+      activeVoices=[];
+      triggerNote(trackIdx,0,note,vel,dur,false,pitchCurve,vibrato,noteTick,voiceChar);
+    } finally {
+      actx=realActx; masterGain=realMaster; trackNodes=realNodes; activeVoices=realVoices; periodicWaveCache=savedWaveCache;
+    }
+    const rendered=await off.startRendering();
+    // Remove padded trailing silence before reversing; otherwise it becomes a
+    // fixed silent lead-in that makes the reversed note sound late.
+    let peak=0;
+    for(let c=0;c<rendered.numberOfChannels;c++){
+      const data=rendered.getChannelData(c);
+      for(let i=0;i<data.length;i++) peak=Math.max(peak,Math.abs(data[i]));
+    }
+    const threshold=Math.max(1e-6,peak*0.001);
+    let lastAudible=-1;
+    for(let i=rendered.length-1;i>=0;i--){
+      for(let c=0;c<rendered.numberOfChannels;c++){
+        if(Math.abs(rendered.getChannelData(c)[i])>threshold){lastAudible=i;break;}
+      }
+      if(lastAudible>=0) break;
+    }
+    if(lastAudible<0) return rendered;
+    // Keep a short safety margin to preserve the quietest release tail.
+    const keepLength=Math.min(rendered.length,lastAudible+1+Math.round(rendered.sampleRate*0.01));
+    const reversed=off.createBuffer(rendered.numberOfChannels,keepLength,rendered.sampleRate);
+    for(let c=0;c<rendered.numberOfChannels;c++){
+      const src=rendered.getChannelData(c), dst=reversed.getChannelData(c);
+      for(let i=0,j=keepLength-1;i<keepLength;i++,j--) dst[i]=src[j];
+    }
+    return reversed;
+  })();
+  reverseBufferCache.set(key,promise);
+  try{return await promise;}catch(err){reverseBufferCache.delete(key);console.warn('Reverse note render failed',err);return null;}
+}
+function prepareReversedBuffersForNotes(trackIdx, noteIds){
+  const tr=song.tracks[trackIdx];
+  if(!tr || !Array.isArray(noteIds) || !noteIds.length) return;
+  const jobs=[];
+  for(const id of noteIds){
+    const n=tr.notes.find(item=>item.id===id);
+    if(!n || !n.reverse) continue;
+    const endTick=effectiveNoteEndTick(trackIdx,n);
+    const dur=Math.max(.01,tickSpanSeconds(n.startTick,endTick));
+    jobs.push(makeReversedNoteBuffer(trackIdx,n.pitch,n.velocity??100,dur,n.pitchCurve,
+      resolveVibratoHz(n.vibrato,n.startTick),n.startTick,n.voiceChar));
+  }
+  if(jobs.length){
+    showToast('変更後の長さでリバース音声を再生成中…');
+    Promise.all(jobs).then(results=>{
+      if(results.every(Boolean)) showToast('リバース音声を更新しました');
+    });
+  }
+}
+
+function scheduleReversedNote(trackIdx,when,note,vel,dur,register,pitchCurve,vibrato,noteTick,voiceChar){
+  makeReversedNoteBuffer(trackIdx,note,vel,dur,pitchCurve,vibrato,noteTick,voiceChar).then(buffer=>{
+    if(!buffer||!actx||!trackNodes[trackIdx])return;
+    // Align the END of the reversed audio to the MIDI note's end.
+    // A reversed buffer may include a release tail and therefore be longer than
+    // the note duration; in that case it intentionally starts before note-on.
+    const targetEnd=when+dur;
+    const now=actx.currentTime;
+    if(targetEnd<=now+.002) return;
+    const desiredStart=targetEnd-buffer.duration;
+    const startAt=Math.max(desiredStart,now+.005);
+    // If rendering finished after the intended start, skip the already elapsed
+    // portion of the buffer so its remaining tail still ends at targetEnd.
+    const offset=Math.max(0,startAt-desiredStart);
+    if(offset>=buffer.duration) return;
+    const src=actx.createBufferSource(); src.buffer=buffer;
+    const g=actx.createGain(); g.gain.value=1;
+    src.connect(g); g.connect(trackNodes[trackIdx].gain);
+    // Track gain already includes volume/mute/solo and applies the current track mix.
+    if(register){activeVoices.push({src,g});src.onended=()=>{activeVoices=activeVoices.filter(v=>v.src!==src);};}
+    try{src.start(startAt,offset);}catch(err){console.warn('Could not schedule reversed note',err);}
+  });
 }
 
 function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, noteTick, voiceChar){
@@ -6400,13 +6892,85 @@ function buildTrackNodes(withAnalyser=true){
   trackNodes = song.tracks.map(tr=>{
     const g = actx.createGain(); g.gain.value = effectiveTrackGain(tr);
     const p = actx.createStereoPanner(); p.pan.value = tr.pan/100;
-    if(withAnalyser){
-      const an = actx.createAnalyser(); an.fftSize = 1024;
-      g.connect(p); p.connect(an); an.connect(masterGain);
-      return {gain:g, pan:p, analyser:an};
+    // The dry path must always be connected: track gain -> pan -> output.
+    g.connect(p);
+    const fx=tr.effects||{};
+    let delay=null, feedback=null, convolver=null, shaper=null, twistBandpass=null, twistLowpass=null;
+    let twistMixDry=null, twistMixWet=null, twistAutoGain=null, distortionAutoGain=null;
+    let dryTail=p;
+    // Twist: parallel dry/wet blend so the strength slider controls the amount of filtering.
+    if(fx.twist){
+      const strength=Math.max(0,Math.min(100,Number(fx.twistStrength??100)))/100;
+      const mix=actx.createGain();
+      twistMixDry=actx.createGain(); twistMixWet=actx.createGain();
+      twistMixDry.gain.value=1-strength;
+      twistMixWet.gain.value=strength;
+      twistBandpass=actx.createBiquadFilter(); twistBandpass.type='bandpass';
+      twistBandpass.frequency.value=2400;
+      const bandwidth=Math.max(100,Math.min(5000,Number(fx.twistBandwidth)||1200));
+      twistBandpass.Q.value=Math.max(.25,Math.min(18,2400/bandwidth));
+      twistLowpass=actx.createBiquadFilter(); twistLowpass.type='lowpass';
+      twistLowpass.frequency.value=Math.max(200,Math.min(18000,Number(fx.twistLowpass)||7000));
+      twistLowpass.Q.value=.707;
+      p.connect(twistMixDry); twistMixDry.connect(mix);
+      p.connect(twistBandpass); twistBandpass.connect(twistLowpass); twistLowpass.connect(twistMixWet); twistMixWet.connect(mix);
+      // Approximate loudness compensation for energy lost by narrowing the spectrum.
+      // Keep the boost bounded to avoid sudden clipping on quiet/narrow settings.
+      twistAutoGain=actx.createGain();
+      const lowpass=Math.max(200,Math.min(18000,Number(fx.twistLowpass)||7000));
+      const bandwidthComp=Math.sqrt(1200/bandwidth);
+      const lowpassComp=lowpass<7000?Math.sqrt(7000/lowpass):1;
+      twistAutoGain.gain.value=1+strength*Math.min(1.5,Math.max(0,bandwidthComp*lowpassComp-1));
+      mix.connect(twistAutoGain); dryTail=twistAutoGain;
     }
-    g.connect(p); p.connect(masterGain);
-    return {gain:g, pan:p, analyser:null};
+    if(fx.distortion){
+      shaper=actx.createWaveShaper();
+      const amount=Math.max(0,Math.min(1000,Number(fx.distortionAmount)||250));
+      const curve=new Float32Array(44100);
+      for(let j=0;j<curve.length;j++){
+        const x=j*2/(curve.length-1)-1;
+        curve[j]=(1+amount/100)*x/(1+amount/100*Math.abs(x));
+      }
+      shaper.curve=curve; shaper.oversample='4x';
+      dryTail.connect(shaper);
+      // Reduce the post-distortion level as drive rises, compensating for perceived loudness.
+      distortionAutoGain=actx.createGain();
+      distortionAutoGain.gain.value=1/Math.sqrt(1+amount/180);
+      shaper.connect(distortionAutoGain); dryTail=distortionAutoGain;
+    }
+    // Dry signal always reaches the master output, even when effects are enabled.
+    let analyser=null;
+    if(withAnalyser){
+      analyser=actx.createAnalyser(); analyser.fftSize=1024;
+      dryTail.connect(analyser); analyser.connect(masterGain);
+    } else {
+      dryTail.connect(masterGain);
+    }
+    // Time-based effects are parallel sends so enabling one never breaks the dry path.
+    let echoSend=null, echoWet=null;
+    if(fx.echo){
+      delay=actx.createDelay(1);
+      delay.delayTime.value=Math.max(.05,Math.min(.8,Number(fx.echoTime)||.24));
+      feedback=actx.createGain();
+      feedback.gain.value=Math.max(0,Math.min(.85,Number(fx.echoFeedback)||.3));
+      echoSend=actx.createGain(); echoSend.gain.value=1;
+      echoWet=actx.createGain(); echoWet.gain.value=.45;
+      dryTail.connect(echoSend); echoSend.connect(delay); delay.connect(echoWet); echoWet.connect(masterGain);
+      delay.connect(feedback); feedback.connect(delay);
+    }
+    if(fx.reverb){
+      convolver=actx.createConvolver();
+      const len=Math.max(.2,Math.min(5,Number(fx.reverbTime)||1.8));
+      const ir=actx.createBuffer(2,Math.floor(actx.sampleRate*len),actx.sampleRate);
+      for(let c=0;c<2;c++){
+        const d=ir.getChannelData(c);
+        for(let j=0;j<d.length;j++) d[j]=(Math.random()*2-1)*Math.pow(1-j/d.length,3);
+      }
+      convolver.buffer=ir;
+      const wet=actx.createGain(); wet.gain.value=.35;
+      dryTail.connect(convolver); convolver.connect(wet); wet.connect(masterGain);
+    }
+    return {gain:g, pan:p, analyser, delay, feedback, echoSend, echoWet, convolver, shaper, twistBandpass, twistLowpass, twistMixDry, twistMixWet, twistAutoGain, distortionAutoGain};
   });
 }
 function syncTrackNodesFromSong(){
@@ -6608,6 +7172,18 @@ function updateFlagIdxLabel(){
 
 function startPlayback(fromTick){
   ensureAudio();
+  // Re-enable echo for a new playback session after stopPlayback cut its tail.
+  if(actx){
+    const now=actx.currentTime;
+    trackNodes.forEach((node,i)=>{
+      const fx=song.tracks[i]?.effects||{};
+      if(node.echoWet && fx.echo){
+        node.echoSend.gain.setValueAtTime(1,now);
+        node.feedback.gain.setValueAtTime(Math.max(0,Math.min(.85,Number(fx.echoFeedback)||.3)),now);
+        node.echoWet.gain.setValueAtTime(.45,now);
+      }
+    });
+  }
   playing=true;
   [document.getElementById('playBtn'),document.getElementById('toStartBtn'),document.getElementById('playFlagBtn')].forEach(b=>b.classList.remove('playing'));
   const activeBtn = fromTick===0 ? document.getElementById('toStartBtn')
@@ -6632,6 +7208,15 @@ function stopPlayback(){
   clearTimeout(schedTimer);
   clearInterval(schedulerInterval);
   stopAllVoices();
+  // Cut echo immediately on transport stop; don't let feedback tails continue.
+  if(actx){
+    const now=actx.currentTime;
+    trackNodes.forEach(node=>{
+      if(node.echoWet) node.echoWet.gain.setValueAtTime(0,now);
+      if(node.echoSend) node.echoSend.gain.setValueAtTime(0,now);
+      if(node.feedback) node.feedback.gain.setValueAtTime(0,now);
+    });
+  }
 }
 /* used when tempo/instrument changes while playing: cut everything and restart scheduling
    from the current playhead position so the change is heard immediately */
@@ -6717,7 +7302,11 @@ function runScheduler(){
     const {ti,nt} = scheduleQueue[scheduleIdx];
     const when = playStartTime + tickSpanSeconds(playStartTick, nt.startTick);
     const dur = Math.max(0.01, tickSpanSeconds(nt.startTick, effectiveNoteEndTick(ti, nt)));
-    triggerNote(ti, when, nt.pitch, nt.velocity ?? 100, dur, true, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick, nt.voiceChar);
+    if(nt.reverse){
+      scheduleReversedNote(ti,when,nt.pitch,nt.velocity??100,dur,true,nt.pitchCurve,resolveVibratoHz(nt.vibrato,nt.startTick),nt.startTick,nt.voiceChar);
+    }else{
+      triggerNote(ti, when, nt.pitch, nt.velocity ?? 100, dur, true, nt.pitchCurve, resolveVibratoHz(nt.vibrato, nt.startTick), nt.startTick, nt.voiceChar);
+    }
     scheduleIdx++;
   }
   while(audioScheduleIdx<audioScheduleQueue.length && audioScheduleQueue[audioScheduleIdx].clip.startTick<=aheadTick){
