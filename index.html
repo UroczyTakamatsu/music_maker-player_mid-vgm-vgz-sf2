@@ -73,6 +73,7 @@
 
   #pitchSubbar{display:flex;align-items:center;background:var(--bg-1);border-bottom:1px solid var(--line);padding:3px 8px 3px calc(var(--keyw,140px) + 5px);gap:4px;min-height:34px;}
   #pitchSubbar.hidden{display:none;}
+  body.audio-track-selected #noteEditSubbar{display:none!important;}
   #pitchSubbar .iconbtn{flex:0 0 auto;}
   body.audio-track-selected #showOtherTracksBtn,body.audio-track-selected #vibratoBtn,body.audio-track-selected #pitchClearBtn,body.audio-track-selected #chordSuggestBtn{display:none!important;}
   body.audio-track-selected #chordSubbar{display:none!important;}
@@ -118,6 +119,9 @@
   #vowelMapCanvas{width:100%;height:auto;display:block;touch-action:none;background:#fff;border-radius:10px;}
   #vowelMapHelp{font-size:12px;color:var(--text-dim);padding:0 16px 10px;line-height:1.5;}
   #voiceEditBtn.active ~ *{}
+  #utauLyricEditBtn.active{background:var(--accent-dim);color:#fff;}
+  body.utau-lyric-editing #modeBtn,body.utau-lyric-editing #copyBtn,body.utau-lyric-editing #pasteBtn{opacity:.35;pointer-events:none;}
+  body.utau-lyric-editing #gridCanvas{cursor:text;}
   body.voice-editing #modeBtn,body.voice-editing #copyBtn,body.voice-editing #pasteBtn{opacity:.35;pointer-events:none;}
   body.voice-editing #topbar2>button:not(#voiceEditBtn){opacity:.35;pointer-events:none;}
   body.voice-editing #chordSubbar,body.voice-editing #pitchSubbar{opacity:.35;pointer-events:none;}
@@ -252,6 +256,8 @@
     <button class="iconbtn" id="showOtherTracksBtn" title="他トラック表示">📔</button>
     <button class="iconbtn" id="pitchCurveBtn" title="ピッチカーブ編集">〜</button>
     <button class="iconbtn" id="waveformViewBtn" title="トラックの波形を表示">📈</button>
+    <button class="iconbtn" id="utauLyricEditBtn" title="UTAU歌詞割り当て" hidden>あ</button>
+    <button class="iconbtn" id="quantizeNotesBtn" title="選択ノーツを表示中のグリッドにクオンタイズ">⌗</button>
     <button class="iconbtn" id="effectsBtn" title="トラックエフェクト">🎛️</button>
     <button class="iconbtn" id="reverseBtn" title="選択ノーツをリバース">↩️</button>
     <button class="iconbtn" id="chordSuggestBtn" title="ベースからコード候補を表示">🎼</button>
@@ -841,6 +847,28 @@
   </div>
 </div>
 
+<div class="overlay hidden" id="drumSynthOverlay">
+  <div class="dialog" style="max-width:400px;">
+    <h3>Drum Synth 音作り</h3>
+    <div class="field">
+      <label>編集するドラム音</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="drumSoundSelect" style="flex:1;min-width:0;padding:10px;background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:8px;">
+          <option value="kick">キック（MIDI 35/36）</option><option value="snare">スネア（38/40）</option><option value="closedHat">クローズドハイハット（42/44）</option><option value="openHat">オープンハイハット（46）</option><option value="tom">タム（41/43/45/47/48/50）</option><option value="crash">クラッシュ（49/51/57/59）</option>
+        </select>
+        <button type="button" id="drumSynthPreviewBtn" style="white-space:nowrap;">▶ プレビュー</button>
+      </div>
+      <label style="margin-top:12px;">音程 / 基本周波数</label><div class="numval" id="drumPitchVal">55 Hz</div><input type="range" id="drumPitchSlider" min="30" max="1200" step="1" value="55">
+      <label>減衰時間</label><div class="numval" id="drumDecayVal">0.35 秒</div><input type="range" id="drumDecaySlider" min="0.04" max="2.5" step="0.01" value="0.35">
+      <label>音の明るさ（フィルター）</label><div class="numval" id="drumToneVal">2500 Hz</div><input type="range" id="drumToneSlider" min="200" max="14000" step="100" value="2500">
+      <label>ノイズ量</label><div class="numval" id="drumNoiseVal">20%</div><input type="range" id="drumNoiseSlider" min="0" max="100" step="1" value="20">
+      <label>ゲイン（音量）</label><div class="numval" id="drumGainVal">100%</div><input type="range" id="drumGainSlider" min="50" max="500" step="5" value="100">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:8px;line-height:1.5;">ピアノロールのノート番号でキック・スネア・ハイハットなどを鳴らし分けます。ここでの設定はドラム音の種類ごとに保存されます。</div>
+    </div>
+    <div class="foot"><button id="drumSynthResetBtn">この音をリセット</button><button data-close="drumSynthOverlay">閉じる</button></div>
+  </div>
+</div>
+
 <div class="overlay hidden" id="gridDivOverlay">
   <div class="dialog" style="max-width:300px;">
     <h3>グリッド分割</h3>
@@ -1000,8 +1028,14 @@ function effectiveNoteEndTick(trackIdx, nt){
   return nt.startTick+nt.lengthTick;
 }
 
+function drumSynthKeyForNote(note){const n=Math.round(note);return (n===35||n===36)?'kick':(n===38||n===40)?'snare':(n===42||n===44)?'closedHat':n===46?'openHat':([41,43,45,47,48,50].includes(n)?'tom':([49,51,57,59].includes(n)?'crash':(n<38?'kick':n<42?'snare':n<46?'closedHat':n<49?'openHat':n<52?'crash':'tom')));}
+function defaultDrumSynth(){ return {
+  kick:{pitch:55,decay:.32,tone:1800,noise:4,gain:100}, snare:{pitch:185,decay:.22,tone:6500,noise:72,gain:100},
+  closedHat:{pitch:420,decay:.08,tone:11000,noise:88,gain:100}, openHat:{pitch:360,decay:.55,tone:10000,noise:92,gain:100},
+  tom:{pitch:115,decay:.38,tone:3000,noise:12,gain:100}, crash:{pitch:260,decay:1.35,tone:12000,noise:96,gain:100}
+}; }
 function newTrack(i){
-  return { id:i, name:'Track '+(i+1), instrument: i===9? -1 : 0, instrumentType:'preset',
+  return { id:i, name:'Track '+(i+1), instrument: i===9? -1 : 0, instrumentType:'preset', drumSynth:defaultDrumSynth(),
     synthMode:'preset', synthPresetIdx:3, synthCustomSlot:1,
     sf2Key:null, sf2Name:null, sf2Bank:0, sf2Program:0,
     fmMemorySlot:1, timbreEvents:[], // FM Synth: which of the 16 project-wide memory slots this track uses, plus mid-track switch events
@@ -1295,6 +1329,35 @@ const rollScroll = document.getElementById('rollScroll');
 const KEYW = 64;
 document.documentElement.style.setProperty('--keyw', KEYW+'px');
 
+// Drum Synth uses a compact percussion lane instead of the full melodic keyboard.
+const DRUM_ROLL_MIN = 35, DRUM_ROLL_MAX = 60;
+let lastRollWasDrumSynth = null;
+let savedMelodicRollView = null;
+function isDrumSynthRoll(){ return !!(song && song.tracks && song.tracks[song.activeTrack] && song.tracks[song.activeTrack].instrumentType==='drumSynth'); }
+function rollPitchRange(){ return isDrumSynthRoll() ? {min:DRUM_ROLL_MIN,max:DRUM_ROLL_MAX} : {min:NOTE_MIN,max:NOTE_MAX}; }
+function rollViewportHeight(){ return gridCanvas ? gridCanvas.height/(window.devicePixelRatio||1) : 480; }
+function clampRollTopNote(n){
+  const range=rollPitchRange();
+  if(!isDrumSynthRoll()) return Math.max(range.min,Math.min(range.max,Math.round(n)));
+  const visible=Math.max(1,Math.floor(rollViewportHeight()/view.rowH));
+  const minTop=Math.min(range.max,range.min+visible-1);
+  return Math.max(minTop,Math.min(range.max,Math.round(n)));
+}
+function syncRollViewForTrack(){
+  const drum=isDrumSynthRoll();
+  if(lastRollWasDrumSynth===null){ lastRollWasDrumSynth=drum; if(drum){ view.rowH=23; view.topNote=DRUM_ROLL_MAX; } return; }
+  if(drum===lastRollWasDrumSynth) return;
+  if(drum){ savedMelodicRollView={rowH:view.rowH,topNote:view.topNote}; view.rowH=23; view.topNote=DRUM_ROLL_MAX; }
+  else if(savedMelodicRollView){ view.rowH=savedMelodicRollView.rowH; view.topNote=savedMelodicRollView.topNote; savedMelodicRollView=null; }
+  lastRollWasDrumSynth=drum;
+  view.topNote=clampRollTopNote(view.topNote);
+}
+function drumRowLabel(n){
+  const type=drumSynthKeyForNote(n);
+  const labels={kick:'バスドラ',snare:'スネア',closedHat:'HH（閉）',openHat:'HH（開）',tom:'タム',crash:'シンバル'};
+  return labels[type]||'ドラム';
+}
+
 function resizeCanvases(){
   const wrapRect = rollScroll.getBoundingClientRect();
   const dpr = window.devicePixelRatio||1;
@@ -1350,7 +1413,7 @@ function isBlackKey(n){ return [1,3,6,8,10].includes(n%12); }
 /* ============================================================
    DRAWING
    ============================================================ */
-function gridTicks(){ return GRID_DIVISIONS.find(g=>g.id===song.gridDiv).ticks; }
+function gridTicks(){ return (GRID_DIVISIONS.find(g=>g.id===song.gridDiv)||{ticks:PPQ/4}).ticks; }
 
 function drawKeyboard(){
   const ctx = kbCanvas.getContext('2d');
@@ -1358,19 +1421,28 @@ function drawKeyboard(){
   ctx.clearRect(0,0,KEYW,h);
   const rowH = view.rowH;
   const topNote = view.topNote;
+  const range=rollPitchRange(), drum=isDrumSynthRoll();
   const rows = Math.ceil(h/rowH)+1;
   for(let r=0;r<rows;r++){
     const n = topNote - r;
-    if(n<NOTE_MIN||n>NOTE_MAX) continue;
+    if(n<range.min||n>range.max) continue;
     const y = r*rowH;
-    ctx.fillStyle = isBlackKey(n) ? '#20222a' : '#eef0f4';
-    ctx.fillRect(0,y,KEYW,rowH);
-    ctx.strokeStyle = 'rgba(0,0,0,.25)';
-    ctx.strokeRect(0,y+.5,KEYW,rowH);
-    if(n%12===0){
-      ctx.fillStyle = 'rgba(120,120,130,.9)';
-      ctx.font = '10px sans-serif';
-      ctx.fillText(noteName(n), 6, y+rowH-4);
+    if(drum){
+      ctx.fillStyle = (n%2===0) ? '#e5e9ef' : '#f4f5f8';
+      ctx.fillRect(0,y,KEYW,rowH);
+      ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.strokeRect(0,y+.5,KEYW,rowH);
+      ctx.fillStyle = '#303744'; ctx.font = '9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(n+' '+drumRowLabel(n), 3, y+rowH/2, KEYW-5);
+    } else {
+      ctx.fillStyle = isBlackKey(n) ? '#20222a' : '#eef0f4';
+      ctx.fillRect(0,y,KEYW,rowH);
+      ctx.strokeStyle = 'rgba(0,0,0,.25)';
+      ctx.strokeRect(0,y+.5,KEYW,rowH);
+      if(n%12===0){
+        ctx.fillStyle = 'rgba(120,120,130,.9)';
+        ctx.font = '10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+        ctx.fillText(noteName(n), 6, y+rowH-4);
+      }
     }
   }
 }
@@ -1378,7 +1450,7 @@ function drawKeyboard(){
 function tickToX(t){ return (t - view.scrollX)*view.pxPerTick; }
 function xToTick(x){ return x/view.pxPerTick + view.scrollX; }
 function noteToY(n){ return (view.topNote - n)*view.rowH; }
-function yToNote(y){ return Math.round(view.topNote - y/view.rowH); }
+function yToNote(y){ const n=Math.round(view.topNote-y/view.rowH),r=rollPitchRange(); return Math.max(r.min,Math.min(r.max,n)); }
 function yToNoteFloat(y){ return view.topNote - y/view.rowH; }
 
 function drawFlagStrip(){
@@ -1432,32 +1504,43 @@ function drawGrid(){
 
   const rowH = view.rowH;
   const topNote = view.topNote;
-  // row backgrounds (alternate per key octave shading like image)
-  for(let n=NOTE_MAX;n>=NOTE_MIN;n--){
+  const range=rollPitchRange(), drum=isDrumSynthRoll();
+  // Drum Synth shows only its playable percussion range; each MIDI note gets an equally tall lane.
+  for(let n=range.max;n>=range.min;n--){
     const y = noteToY(n);
     if(y+rowH<0||y>h) continue;
-    ctx.fillStyle = isBlackKey(n) ? '#1a1c22' : '#20222b';
+    ctx.fillStyle = drum ? ((n%2===0)?'#252b36':'#202630') : (isBlackKey(n) ? '#1a1c22' : '#20222b');
     ctx.fillRect(0,y,w,rowH);
+    if(drum){ctx.strokeStyle='rgba(150,165,185,.18)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,y+rowH-.5);ctx.lineTo(w,y+rowH-.5);ctx.stroke();}
   }
 
   // vertical grid lines by subdivision + measure/beat emphasis
   const gt = gridTicks();
-  const startTick = Math.max(0, Math.floor(view.scrollX/gt)*gt);
   const endTick = view.scrollX + w/view.pxPerTick;
   ensureMeasureCache(Math.ceil(tickToMeasure(endTick))+2);
-
-  for(let t=startTick; t<=endTick; t+=gt){
-    const x = tickToX(t);
-    const m = tickToMeasure(t);
-    const ts = tsForMeasure(m);
-    const measureStart = measureStartTick(m);
-    const beatTicks = PPQ*4/ts.den;
-    const offsetInMeasure = t - measureStart;
-    const isMeasureLine = Math.abs(offsetInMeasure) < 1;
-    const isBeatLine = Math.abs(offsetInMeasure % beatTicks) < 1;
-    ctx.strokeStyle = isMeasureLine ? '#4a5060' : (isBeatLine ? '#383d4a' : '#2a2e38');
-    ctx.lineWidth = isMeasureLine ? 1.5 : 1;
-    ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); ctx.stroke();
+  if(song.gridDiv!=='none'){
+    const startTick = Math.max(0, Math.floor(view.scrollX/gt)*gt);
+    for(let t=startTick; t<=endTick; t+=gt){
+      const x = tickToX(t), m = tickToMeasure(t), ts = tsForMeasure(m), measureStart = measureStartTick(m);
+      const beatTicks = PPQ*4/ts.den, offsetInMeasure = t - measureStart;
+      const isMeasureLine = Math.abs(offsetInMeasure) < 1;
+      const isBeatLine = Math.abs(offsetInMeasure % beatTicks) < 1;
+      ctx.strokeStyle = isMeasureLine ? '#4a5060' : (isBeatLine ? '#383d4a' : '#2a2e38');
+      ctx.lineWidth = isMeasureLine ? 1.5 : 1;
+      ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); ctx.stroke();
+    }
+  } else {
+    // Gridless mode still keeps measure and beat guides, but removes subdivision lines.
+    let m=Math.max(1,Math.floor(tickToMeasure(view.scrollX))-1);
+    for(let guard=0;guard<2000;guard++,m++){
+      const measureStart=measureStartTick(m); if(measureStart>endTick) break;
+      const ts=tsForMeasure(m), beatTicks=PPQ*4/ts.den;
+      for(let b=0;b<ts.num;b++){
+        const t=measureStart+b*beatTicks; if(t<view.scrollX-1||t>endTick) continue;
+        const x=tickToX(t), isMeasure=b===0; ctx.strokeStyle=isMeasure?'#4a5060':'#383d4a'; ctx.lineWidth=isMeasure?1.5:1;
+        ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,h);ctx.stroke();
+      }
+    }
   }
 
   // While placing or dragging a note, make the whole note range visible
@@ -1528,6 +1611,10 @@ function drawGrid(){
       ctx.strokeStyle = '#173832';
       roundRect(ctx, x, y+1, Math.max(3,wpx-1), rh, 3);
       ctx.fill(); ctx.stroke();
+    }
+    if(tr.instrumentType==='utau' && nt.lyric){
+      ctx.save();ctx.fillStyle=sel?'#14161b':'#10201e';ctx.font='bold '+Math.max(10,Math.min(16,rowH-4))+'px sans-serif';
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(nt.lyric,x+wpx/2,y+rowH/2,Math.max(8,wpx-3));ctx.restore();
     }
     if(tr.instrumentType==='voice' && nt.voiceChar){
       ctx.save();ctx.fillStyle=sel?'#14161b':'#10201e';ctx.font='bold '+Math.max(10,Math.min(16,rowH-4))+'px sans-serif';
@@ -1601,13 +1688,14 @@ function roundRect(ctx,x,y,w,h,r){
 function updateScrollbars(){
   const gh = gridCanvas.height/(window.devicePixelRatio||1);
   const gw = gridCanvas.width/(window.devicePixelRatio||1);
-  const totalRows = NOTE_MAX-NOTE_MIN+1;
+  const range=rollPitchRange();
+  const totalRows = range.max-range.min+1;
   const visRows = gh/view.rowH;
   const vThumb = document.getElementById('vScrollThumb');
   const vTrackH = document.getElementById('vScrollTrack').clientHeight;
   const vFrac = Math.min(1, visRows/totalRows);
   vThumb.style.height = Math.max(24, vTrackH*vFrac)+'px';
-  const vScrollFrac = (NOTE_MAX-view.topNote)/(totalRows-visRows||1);
+  const vScrollFrac = (range.max-view.topNote)/(totalRows-visRows||1);
   vThumb.style.top = Math.max(0,Math.min(1,vScrollFrac))*(vTrackH-vThumb.offsetHeight)+'px';
 
   const totalTicks = Math.max(measureStartTick(64), view.scrollX+gw/view.pxPerTick+PPQ*4);
@@ -1621,6 +1709,8 @@ function updateScrollbars(){
 }
 
 function drawAll(){
+  syncRollViewForTrack();
+  view.topNote=clampRollTopNote(view.topNote);
   drawKeyboard(); drawGrid(); if(audioEditorMode)drawAudioTimeline(); drawChordDragPreview(); drawFlagStrip(); updateScrollbars();
   updateActualChordLabel(); refreshChordCandidates();
   updateTrackGridUI(); updatePosLabel(); updateTimesigLabel(); updateFlagIdxLabel();
@@ -2061,6 +2151,7 @@ function updateVoiceEditButton(){
   if(isVoice && !tr.voiceEditMode) tr.voiceEditMode='normal';
   if(!isVoice&&voiceEditMode)setVoiceEditMode(false);
   voiceEditBtn.classList.toggle('active',voiceEditMode);
+  updateUtauLyricEditButton();
 }
 function setVoiceEditMode(on){
   voiceEditMode=!!on && song.tracks[song.activeTrack]?.instrumentType==='voice';
@@ -2169,12 +2260,48 @@ let pointerDownInfo=null;
 let otherTracksMode='off'; // 'off' | 'dim' | 'full'
 let otherTracksVisible = new Set(Array.from({length:16},(_,i)=>i)); // which tracks participate when mode!=='off'
 
-function snapTick(t){ const gt=gridTicks(); return Math.round(t/gt)*gt; }
-function floorTick(t){ const gt=gridTicks(); return Math.floor(t/gt)*gt; }
+function snapTick(t){ if(song.gridDiv==='none') return Math.max(0,Math.round(t)); const gt=gridTicks(); return Math.round(t/gt)*gt; }
+function floorTick(t){ if(song.gridDiv==='none') return Math.max(0,Math.round(t)); const gt=gridTicks(); return Math.floor(t/gt)*gt; }
+
+let utauLyricEditMode=false;
+let utauLyricPendingTap=null;
+const utauLyricEditBtn=document.getElementById('utauLyricEditBtn');
+function updateUtauLyricEditButton(){
+  const tr=song.tracks[song.activeTrack];
+  const isUtau=!audioEditorMode && !!tr && tr.instrumentType==='utau';
+  utauLyricEditBtn.hidden=!isUtau;
+  if(!isUtau && utauLyricEditMode) setUtauLyricEditMode(false);
+  utauLyricEditBtn.classList.toggle('active',utauLyricEditMode);
+}
+function setUtauLyricEditMode(on){
+  utauLyricEditMode=!!on && song.tracks[song.activeTrack]?.instrumentType==='utau';
+  document.body.classList.toggle('utau-lyric-editing',utauLyricEditMode);
+  utauLyricEditBtn.classList.toggle('active',utauLyricEditMode);
+  utauLyricEditBtn.setAttribute('aria-pressed',String(utauLyricEditMode));
+  utauLyricPendingTap=null;
+  drawGrid();
+}
+utauLyricEditBtn.addEventListener('click',()=>setUtauLyricEditMode(!utauLyricEditMode));
 
 gridCanvas.addEventListener('pointerdown', onGridDown);
 gridCanvas.addEventListener('pointermove', onGridMove);
 window.addEventListener('pointerup', e=>{
+  if(utauLyricPendingTap && utauLyricPendingTap.pointerId===e.pointerId){
+    const pending=utauLyricPendingTap; utauLyricPendingTap=null;
+    if(!pending.moved && pending.note && utauLyricEditMode){
+      const value=prompt('歌詞を入力（複数文字は次のノートへ自動割り当て。例：こんにちは／「きゃ」は1単位）',pending.note.lyric||'あ');
+      if(value!==null){
+        const before=snapshotNotes();
+        const count=assignUtauLyricsFromText(pending.note,value);
+        if(count){
+          pushUndoIfChanged(before);
+          showToast(`${count}タイミング分のUTAU歌詞を割り当てました`);
+        }
+        drawGrid();
+      }
+    }
+    return;
+  }
   if(pointerDownInfo && pointerDownInfo.pointerId===e.pointerId) onGridUp(e);
   if(voicePendingTap && voicePendingTap.pointerId===e.pointerId){
     const pending=voicePendingTap; voicePendingTap=null;
@@ -2202,6 +2329,7 @@ window.addEventListener('pointerup', e=>{
   }
 });
 window.addEventListener('pointercancel', e=>{
+  if(utauLyricPendingTap && utauLyricPendingTap.pointerId===e.pointerId) utauLyricPendingTap=null;
   if(pointerDownInfo && pointerDownInfo.pointerId===e.pointerId) onGridUp(e);
   if(voicePendingTap && voicePendingTap.pointerId===e.pointerId) voicePendingTap=null;
 });
@@ -2322,14 +2450,34 @@ function restoreTrackEchoAfterLivePreview(){
     current.echoWet.gain.setValueAtTime(.45,now);
   },Math.ceil((delaySeconds+.03)*1000));
 }
+let livePreviewRequestId=0;
 function startLivePreview(trackIdx, pitch){
   ensureAudio();
   stopLivePreview();
+  stopAllPreviewVoices();
   suppressTrackEchoForLivePreview(trackIdx);
+  const tr=song.tracks[trackIdx];
+  // UTAU is rendered asynchronously. Never fall back to the normal synth while
+  // waiting for an uncached UTAU pitch, otherwise the first preview after a new
+  // pitch change sounds like a piano.
+  if(tr?.instrumentType==='utau' && utauBank && utauWorldline){
+    const requestId=++livePreviewRequestId;
+    const alias=utauAliasForLyric((tr.notes||[]).find(n=>n.pitch===pitch)?.lyric||'あ');
+    const dur=4.0;
+    getUtauAudioBuffer(alias,pitch,dur).then(buffer=>{
+      if(requestId!==livePreviewRequestId || !buffer || !actx || !trackNodes[trackIdx])return;
+      const src=actx.createBufferSource();src.buffer=buffer;
+      const g=actx.createGain();g.gain.value=1;src.connect(g);g.connect(trackNodes[trackIdx].gain);
+      const handle={src,g};livePreview=handle;
+      try{src.start(actx.currentTime);}catch(err){console.warn('UTAU live preview failed',err);}
+    }).catch(err=>console.warn('UTAU live preview render failed',err));
+    return;
+  }
   const handle = triggerNote(trackIdx, actx.currentTime, pitch, 100, 4.0, false);
   livePreview = handle || null;
 }
 function stopLivePreview(){
+  ++livePreviewRequestId;
   if(livePreview){
     try{ stopVoiceHandle(livePreview, actx.currentTime); }catch(err){ /* already ended */ }
     livePreview=null;
@@ -2338,6 +2486,12 @@ function stopLivePreview(){
 }
 
 function onGridDown(e){
+  if(utauLyricEditMode){
+    e.preventDefault();
+    const p=localPos(e), tick=xToTick(p.x), pitch=yToNote(p.y), hitNote=hitTestNote(tick,pitch);
+    utauLyricPendingTap={pointerId:e.pointerId,clientX:e.clientX,clientY:e.clientY,note:hitNote,moved:false};
+    return; // Assignment mode owns the piano-roll tap; no create/delete/select/move/resize is allowed.
+  }
   if(voiceEditMode){
     e.preventDefault();
     const p=localPos(e), tick=xToTick(p.x), pitch=yToNote(p.y), hitNote=hitTestNote(tick,pitch);
@@ -2397,6 +2551,7 @@ function onGridDown(e){
 }
 
 function floorLengthToPointer(startTick, pointerTick){
+  if(song.gridDiv==='none') return Math.max(1,Math.round(pointerTick-startTick));
   const gt = gridTicks();
   const units = Math.floor((pointerTick - startTick)/gt);
   return Math.max(gt, (units+1)*gt);
@@ -2597,8 +2752,8 @@ function startSelRectAutoscroll(){
     let moved=false;
     if(lastPointerPos.x < EDGE){ view.scrollX = Math.max(0, view.scrollX - SPEED/view.pxPerTick); moved=true; }
     else if(lastPointerPos.x > gw-EDGE){ view.scrollX += SPEED/view.pxPerTick; moved=true; }
-    if(lastPointerPos.y < EDGE){ view.topNote = Math.min(NOTE_MAX, view.topNote+1); moved=true; }
-    else if(lastPointerPos.y > gh-EDGE){ view.topNote = Math.max(NOTE_MIN, view.topNote-1); moved=true; }
+    if(lastPointerPos.y < EDGE){ view.topNote = clampRollTopNote(view.topNote+1); moved=true; }
+    else if(lastPointerPos.y > gh-EDGE){ view.topNote = clampRollTopNote(view.topNote-1); moved=true; }
     if(moved){ selRect.tick1=xToTick(lastPointerPos.x); selRect.pf1=yToNoteFloat(lastPointerPos.y); drawAll(); }
   }, 40);
 }
@@ -2609,7 +2764,9 @@ function stopSelRectAutoscroll(){ clearInterval(selRectAutoTimer); selRectAutoTi
    selection still works correctly even while the view is auto-scrolling underneath it. */
 function updateDragMovePositions(tick, pitch){
   const tr = song.tracks[song.activeTrack];
-  const dTick = snapTick(tick - pointerDownInfo.tick);
+  // In gridless mode this is a signed drag delta. snapTick() clamps absolute positions
+  // to zero, so using it for a negative delta prevents notes moving left.
+  const dTick = song.gridDiv==='none' ? Math.round(tick - pointerDownInfo.tick) : snapTick(tick - pointerDownInfo.tick);
   const dPitch = pitch - pointerDownInfo.pitch;
   if(!dragMoveInfo.startPositions){
     dragMoveInfo.startPositions = dragMoveInfo.noteIds.map(id=>{
@@ -2621,7 +2778,8 @@ function updateDragMovePositions(tick, pitch){
     const nt2 = tr.notes.find(n=>n.id===sp.id);
     if(!nt2) return;
     nt2.startTick = Math.max(0, sp.startTick + dTick);
-    nt2.pitch = Math.max(NOTE_MIN, Math.min(NOTE_MAX, sp.pitch + dPitch));
+    const pitchRange=rollPitchRange();
+    nt2.pitch = Math.max(pitchRange.min, Math.min(pitchRange.max, sp.pitch + dPitch));
   });
   if(dPitch !== dragMoveInfo.lastDPitch){
     dragMoveInfo.lastDPitch = dPitch;
@@ -2658,11 +2816,12 @@ function stopDragMoveAutoscroll(){ clearInterval(dragMoveAutoTimer); dragMoveAut
 function updateResizePositions(pointerTick){
   const tr = song.tracks[song.activeTrack];
   const newLen = floorLengthToPointer(resizeInfo.note.startTick, pointerTick);
-  const deltaUnits = Math.round((newLen - resizeInfo.startLengths[resizeInfo.note.id]) / gridTicks());
+  const gt=gridTicks();
+  const deltaUnits = song.gridDiv==='none' ? (newLen-resizeInfo.startLengths[resizeInfo.note.id]) : Math.round((newLen - resizeInfo.startLengths[resizeInfo.note.id]) / gt);
   resizeInfo.ids.forEach(id=>{
     const n = tr.notes.find(n=>n.id===id);
     if(!n) return;
-    n.lengthTick = Math.max(gridTicks(), resizeInfo.startLengths[id] + deltaUnits*gridTicks());
+    n.lengthTick = Math.max(song.gridDiv==='none'?1:gt, resizeInfo.startLengths[id] + (song.gridDiv==='none'?deltaUnits:deltaUnits*gt));
   });
 }
 let resizeAutoTimer=null;
@@ -2688,7 +2847,7 @@ function stopResizeAutoscroll(){ clearInterval(resizeAutoTimer); resizeAutoTimer
 gridCanvas.addEventListener('wheel', e=>{
   e.preventDefault();
   view.scrollX = Math.max(0, view.scrollX + e.deltaX/view.pxPerTick + (e.shiftKey? e.deltaY/view.pxPerTick:0));
-  view.topNote = Math.max(NOTE_MIN, Math.min(NOTE_MAX, view.topNote + Math.sign(e.deltaY)* (e.shiftKey?0:1)));
+  view.topNote = clampRollTopNote(view.topNote + Math.sign(e.deltaY)*(e.shiftKey?0:1));
   drawAll();
 },{passive:false});
 
@@ -2705,7 +2864,7 @@ function bindPanArea(trackEl, opts){
   function applyPan(dx,dy){
     if(opts.horizontal) view.scrollX = Math.max(0, view.scrollX - dx/view.pxPerTick);
     if(opts.vertical){
-      vTopNoteAccum = Math.max(NOTE_MIN, Math.min(NOTE_MAX, vTopNoteAccum + dy/view.rowH));
+      vTopNoteAccum = clampRollTopNote(vTopNoteAccum + dy/view.rowH);
       view.topNote = Math.round(vTopNoteAccum);
     }
   }
@@ -3299,7 +3458,7 @@ document.getElementById('copyBtn').onclick=()=>{
   const sel = tr.notes.filter(n=>selection.has(n.id));
   if(!sel.length) return;
   const minTick = Math.min(...sel.map(n=>n.startTick));
-  clipboard = sel.map(n=>({pitch:n.pitch, offset:n.startTick-minTick, lengthTick:n.lengthTick, voiceChar:n.voiceChar}));
+  clipboard = sel.map(n=>({pitch:n.pitch, offset:n.startTick-minTick, lengthTick:n.lengthTick, voiceChar:n.voiceChar, lyric:n.lyric}));
 };
 document.getElementById('pasteBtn').onclick=()=>{
   if(!clipboard.length) return;
@@ -3307,7 +3466,7 @@ document.getElementById('pasteBtn').onclick=()=>{
   const tr = song.tracks[song.activeTrack];
   selection.clear();
   clipboard.forEach(c=>{
-    const nt = {id:noteIdSeq++, pitch:c.pitch, startTick:currentFlagTick()+c.offset, lengthTick:c.lengthTick, ...(c.voiceChar ? {voiceChar:c.voiceChar} : {})};
+    const nt = {id:noteIdSeq++, pitch:c.pitch, startTick:currentFlagTick()+c.offset, lengthTick:c.lengthTick, ...(c.voiceChar ? {voiceChar:c.voiceChar} : {}), ...(c.lyric ? {lyric:c.lyric} : {})};
     tr.notes.push(nt);
     selection.add(nt.id);
   });
@@ -4003,13 +4162,13 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
   }
   song.tracks.forEach((tr,ti)=>{
     const audible=anySolo?tr.solo:!tr.muted;
-    const type=tr.instrumentType==='fm'?6:tr.instrumentType==='synth'?5:tr.instrumentType==='voice'?7:2;
+    const type=tr.instrumentType==='utau'?9:tr.instrumentType==='fm'?6:tr.instrumentType==='synth'?5:tr.instrumentType==='voice'?7:tr.instrumentType==='drumSynth'?8:2;
     let wave=null;
     if(type===5) wave=(getActiveWaveformSamples(tr)||defaultRetroWaveform()).slice();
     const pan=(tr.pan||0)/100, a=(pan+1)*Math.PI/4;
     const panPoints=sortedPanPoints(tr).map(pt=>({tick:pt.tick,pan:Math.max(-100,Math.min(100,pt.pan||0))}));
     const volumePoints=sortedVolumePoints(tr).map(pt=>({tick:pt.tick,volume:Math.max(0,Math.min(127,pt.volume??100))}));
-    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',voiceSynthData:tr.instrumentType==='voice'?(tr.voiceSynthData||null):null,gain:audible?tr.volume/127:0,volume:tr.volume??100,volumePoints,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),panPoints,wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0,adsr:tr.instrumentType!=='fm'&&tr.instrument!==-1&&tr.adsr?{...tr.adsr}:null};
+    const out={type,instrument:tr.instrument,instrumentType:tr.instrumentType||'preset',drumSynth:tr.instrumentType==='drumSynth'?(tr.drumSynth||defaultDrumSynth()):null,voiceSynthData:tr.instrumentType==='voice'?(tr.voiceSynthData||null):null,gain:audible?tr.volume/127:0,volume:tr.volume??100,volumePoints,pan:tr.pan||0,panL:Math.cos(a),panR:Math.sin(a),panPoints,wave,notes:[],presets:presetPool,sf2Key:tr.instrumentType==='sf2'?tr.sf2Key:null,sf2Bank:tr.instrumentType==='sf2'?(tr.sf2Bank|0):0,sf2Program:tr.instrumentType==='sf2'?(tr.sf2Program|0):0,adsr:tr.instrumentType!=='fm'&&tr.instrument!==-1&&tr.adsr?{...tr.adsr}:null};
     tr.notes.forEach(nt=>{
       const endTick=effectiveNoteEndTick(ti,nt);
       const when=leadSeconds+tickToSeconds(nt.startTick);
@@ -4020,6 +4179,8 @@ function buildLowLevelRenderConfig(totalSeconds, sampleRate, leadSeconds){
       // when it mixes an SF2 voice.
       const n={s:Math.floor(when*sampleRate),d:Math.floor((when+dur)*sampleRate),len:dur,p:nt.pitch,v:nt.velocity??100,reverse:!!nt.reverse,_sourceNote:nt,_trackIndex:ti};
       if(type===7) n.vowel=voiceSynthVowelKey(nt.voiceChar,tr.voiceSynthData||{});
+      if(type===9) n.ua=utauAliasForLyric(nt.lyric||nt.voiceChar||'あ');
+      if(type===8){n.dk=drumSynthKeyForNote(nt.pitch);n.dc={...(DRUM_SYNTH_KEYS[n.dk]||{}),...((tr.drumSynth||defaultDrumSynth())[n.dk]||{})};}
       if(nt.pitchCurve&&nt.pitchCurve.length>=2) n.c=nt.pitchCurve.map(pt=>[pt.t*dur,pt.semi]);
       const vib=resolveVibratoHz(nt.vibrato,nt.startTick);
       if(vib) n.b=[vib.depth,vib.speed,vib.delay];
@@ -4072,6 +4233,51 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
   }
 
   const cfg=buildLowLevelRenderConfig(totalSeconds,sampleRate,leadSeconds);
+
+  // UTAU is generated by WORLD rather than by a cheap per-sample oscillator.
+  // Render each unique (alias,pitch,duration) once, in parallel batches, then
+  // mix the resulting PCM directly into the same low-level track buffers.
+  // This keeps the existing low-level mixer intact and avoids an
+  // AudioNode/OfflineAudioContext per note.
+  const utauExportBuffers=new Map();
+  const utauJobs=[];
+  if(cfg.tracks.some(t=>t.type===9 && t.notes.length)){
+    if(!utauBank||!utauWorldline){
+      throw new Error('UTAU音源が読み込まれていません。UTAU ZIPを先に読み込んでください。');
+    }
+    const unique=new Map();
+    cfg.tracks.forEach(tr=>{
+      if(tr.type!==9)return;
+      for(const n of tr.notes){
+        const alias=n.ua||'あ';
+        const key=[alias,n.p,Math.round((n.len||.01)*1000)].join('|');
+        if(!unique.has(key))unique.set(key,{key,alias,note:n.p,dur:n.len||.01});
+      }
+    });
+    const jobs=[...unique.values()];
+    const concurrency=Math.max(2,Math.min(6,Number(navigator.hardwareConcurrency)||4));
+    let nextJob=0, doneJobs=0;
+    const runWorker=async()=>{
+      while(true){
+        if(exportCancelled)return;
+        const job=jobs[nextJob++];
+        if(!job)return;
+        const buf=await getUtauAudioBuffer(job.alias,job.note,job.dur);
+        if(buf)utauExportBuffers.set(job.key,buf);
+        doneJobs++;
+        setExportProgress(`UTAU音声を高速レンダリング中... ${doneJobs}/${jobs.length}`,
+          .03+.12*(doneJobs/Math.max(1,jobs.length)));
+      }
+    };
+    setExportProgress(`UTAU音声を高速レンダリング中... 0/${jobs.length}`,.03);
+    for(let i=0;i<Math.min(concurrency,jobs.length);i++)utauJobs.push(runWorker());
+    await Promise.all(utauJobs);
+    if(exportCancelled)return null;
+    if(utauExportBuffers.size<jobs.length){
+      throw new Error(`UTAU音声のレンダリングに失敗しました（${utauExportBuffers.size}/${jobs.length}）`);
+    }
+  }
+
   const totalFrames=cfg.totalFrames;
   const buffer=actx.createBuffer(2,totalFrames,sampleRate);
   const L=buffer.getChannelData(0), R=buffer.getChannelData(1);
@@ -4500,6 +4706,32 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
       const pitch=440*Math.pow(2,(n.p-69)/12);
       const kind=tr.type;
 
+      if(kind===9){
+        const key=[n.ua||'あ',n.p,Math.round((n.len||.01)*1000)].join('|');
+        const srcBuf=utauExportBuffers.get(key);
+        if(srcBuf){
+          const src=srcBuf.getChannelData(0);
+          const srcRate=srcBuf.sampleRate||48000;
+          const ratio=srcRate/sr;
+          const count=Math.min(end-start,Math.ceil(src.length/ratio));
+          for(let k=0;k<count;k++){
+            const fr=start+k;
+            const pos=k*ratio;
+            const i=Math.floor(pos), f=pos-i;
+            const a=src[Math.min(src.length-1,i)]||0;
+            const b=src[Math.min(src.length-1,i+1)]||0;
+            const smp=a+(b-a)*f;
+            const pg=panGainsAtFrame(tr,fr);
+            addSample(fr,smp*(vel/127),pg[0],pg[1]);
+          }
+        }
+        if((ni&7)===0){
+          setExportProgress('UTAU音声をミキシング中...',Math.min(.94,.15+.79*(processedTracks+(ni/Math.max(1,notes.length)))/Math.max(1,cfg.tracks.length)));
+          await new Promise(r=>setTimeout(r,0));
+        }
+        continue;
+      }
+
       // Default GM preset: use the SAME cached SF2 bank as the original app,
       // but mix its PCM samples directly. No AudioBufferSourceNode is created
       // for the note, and the SF2 sample data remains shared in memory.
@@ -4630,6 +4862,25 @@ async function renderLowLevelMix(totalSeconds,sampleRate,leadSeconds){
             phase=(phase+2*Math.PI*pitch*pm/sr)%(2*Math.PI);
             { const pg=panGainsAtFrame(tr,fr); addSample(fr,gmTimbre(program,phase,pitch*pm,age,dur,vel)*gmEnvelope(program,age,dur,vel),pg[0],pg[1]); }
           }
+        }
+      }else if(kind===8){
+        const dc=n.dc||{pitch:100,decay:.2,tone:3000,noise:30};
+        const key=n.dk||'snare', decay=Math.max(.035,Math.min(3,Number(dc.decay)||.2));
+        const base=Math.max(20,Math.min(1500,Number(dc.pitch)||100)), tone=Math.max(100,Math.min(16000,Number(dc.tone)||3000));
+        const noiseAmt=Math.max(0,Math.min(1,(Number(dc.noise)||0)/100));
+        const renderEnd=Math.min(totalFrames,start+Math.ceil((decay+.01)*sr));let phase=0,seed=(n.p*1103515245+n.s*12345)>>>0,lp=0;
+        const peak=Math.max(.02,vel/127)*.42*Math.max(.5,Math.min(5,(Number(dc.gain)||100)/100));
+        for(let fr=start;fr<renderEnd;fr++){
+          const age=(fr-start)/sr, progress=age/decay;
+          const f=(key==='kick'||key==='tom')?Math.max(25,base*(1+1.8*Math.exp(-age/.045))):base;
+          phase=(phase+2*Math.PI*f/sr)%(2*Math.PI);
+          seed=(seed*1664525+1013904223)>>>0;const noise=(seed/4294967296)*2-1;
+          let tonal=(key==='crash'||key==='closedHat'||key==='openHat')?(Math.sin(phase)+.35*Math.sin(phase*2.71))*.55:Math.sin(phase);
+          const raw=tonal*(1-noiseAmt)+noise*noiseAmt;
+          const alpha=Math.min(1,2*Math.PI*tone/sr);lp+=alpha*(raw-lp);
+          const filtered=(key==='kick'||key==='tom')?lp:(raw-lp);
+          const env=peak*Math.exp(-6.5*progress)*(Math.min(1,age/.002));
+          const pg=panGainsAtFrame(tr,fr);addSample(fr,filtered*env,pg[0],pg[1]);
         }
       }else if(kind===7){
         const data=tr.voiceSynthData;
@@ -4958,14 +5209,14 @@ document.getElementById('exportAudioGo').onclick=async ()=>{
       setExportProgress('FM SynthをWeb Audioと同じ方式でレンダリング中...',.02);
       rendered=await legacyOfflineRender(totalSeconds,sampleRate,leadSeconds);
     }else{
-      setExportProgress(song.tracks.some(t=>t.instrumentType==='voice' && t.notes && t.notes.length) ? 'Voice Synthの母音を高速レンダリング中...' : '低レベルミキサーでレンダリング中...',.02);
+      setExportProgress(song.tracks.some(t=>t.instrumentType==='utau' && t.notes && t.notes.length) ? 'UTAUを高速レンダリングする準備中...' : song.tracks.some(t=>t.instrumentType==='voice' && t.notes && t.notes.length) ? 'Voice Synthの母音を高速レンダリング中...' : '低レベルミキサーでレンダリング中...',.02);
       rendered=await renderLowLevelMix(totalSeconds,sampleRate,leadSeconds);
       if(!rendered){
         setExportProgress('互換レンダラーに切り替え中...',.02);
         rendered=await legacyOfflineRender(totalSeconds,sampleRate,leadSeconds);
       }
     }
-    if(exportCancelled){closeOverlay('exportProgressOverlay');showToast('書き出しをキャンセルしました');return;}
+    if(exportCancelled || !rendered){closeOverlay('exportProgressOverlay');showToast('書き出しをキャンセルしました');return;}
     const filenameBase=song.name.replace(/[\\[\\]]/g,'')||'song';
     if(exportFormat==='wav'){
       setExportProgress('WAVファイルを書き出し中...',.95);
@@ -4998,7 +5249,7 @@ function openTrackDialog(){
   song.tracks.forEach((tr,i)=>{
     const row = document.createElement('div');
     row.className='listrow'+(!audioEditorMode&&i===song.activeTrack?' selected':'');
-    const instName = tr.instrumentType==='voice' ? 'Voice Synth' : tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : (String(tr.instrument).padStart(3,'0')+':'+GM_INSTRUMENTS[tr.instrument]));
+    const instName = tr.instrumentType==='voice' ? 'Voice Synth' : tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='drumSynth' ? 'Drum Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : (String(tr.instrument).padStart(3,'0')+':'+GM_INSTRUMENTS[tr.instrument]));
     const checked = otherTracksVisible.has(i) ? 'checked' : '';
     row.innerHTML = `<div style="display:flex;align-items:center;"><input type="checkbox" class="visChk" ${checked} style="margin-right:10px;width:18px;height:18px;"><span class="dot"></span>${tr.name}</div><span class="sub">${instName}</span>`;
     row.querySelector('.visChk').addEventListener('click', e=>{
@@ -5042,7 +5293,7 @@ document.getElementById('instBtn').onclick=()=>openInstDialog(song.activeTrack);
 function openInstDialog(trackIdx){
   instPendingTrack = trackIdx;
   const tr = song.tracks[trackIdx];
-  switchInstTab((tr.instrumentType==='synth'||tr.instrumentType==='fm'||tr.instrumentType==='voice') ? 'synth' : (tr.instrumentType==='sf2' ? 'sf2' : 'preset'));
+  switchInstTab((tr.instrumentType==='synth'||tr.instrumentType==='fm'||tr.instrumentType==='voice'||tr.instrumentType==='drumSynth') ? 'synth' : (tr.instrumentType==='sf2' ? 'sf2' : 'preset'));
   const keys = document.getElementById('previewKeys');
   keys.innerHTML='';
   for(let o=1;o<=7;o++){
@@ -5064,6 +5315,7 @@ function switchInstTab(tab){
   document.getElementById('instSynthPane').style.display = tab==='synth' ? '' : 'none';
   document.getElementById('instSf2Pane').style.display = tab==='sf2' ? '' : 'none';
   document.getElementById('instWaveBtn').style.display = tab==='synth' ? '' : 'none';
+  document.getElementById('instWaveBtn').textContent = song.tracks[instPendingTrack]?.instrumentType==='drumSynth' ? '音作り' : (song.tracks[instPendingTrack]?.instrumentType==='voice' ? '詳細' : '詳細');
   if(tab==='preset') renderInstList();
   else if(tab==='synth') renderSynthPane();
   else renderSf2Pane();
@@ -5073,11 +5325,11 @@ document.getElementById('instTabSynth').onclick=()=>switchInstTab('synth');
 document.getElementById('instTabSf2').onclick=()=>switchInstTab('sf2');
 
 /* ---- General track settings copy + memory (separate from FM waveform memory) ---- */
-const TRACK_SETTING_FIELDS = ['instrument','instrumentType','synthMode','synthPresetIdx','synthCustomSlot','sf2Key','sf2Name','sf2Bank','sf2Program','fmMemorySlot','timbreEvents','voiceSynthData','voiceSynthName'];
+const TRACK_SETTING_FIELDS = ['instrument','instrumentType','synthMode','synthPresetIdx','synthCustomSlot','sf2Key','sf2Name','sf2Bank','sf2Program','fmMemorySlot','timbreEvents','voiceSynthData','voiceSynthName','drumSynth'];
 function tsClone(v){ return v==null ? v : JSON.parse(JSON.stringify(v)); }
 function tsTrackLabel(i){
   const tr=song.tracks[i];
-  const name=tr.instrumentType==='fm'?'FM Synth':tr.instrumentType==='synth'?'Retro Synth':tr.instrumentType==='voice'?'Voice Synth':tr.instrumentType==='sf2'?('SF2 '+(tr.sf2Name||'')):(tr.instrument===-1?'ドラム':GM_INSTRUMENTS[tr.instrument]||'プリセット');
+  const name=tr.instrumentType==='fm'?'FM Synth':tr.instrumentType==='synth'?'Retro Synth':tr.instrumentType==='voice'?'Voice Synth':tr.instrumentType==='drumSynth'?'Drum Synth':tr.instrumentType==='sf2'?('SF2 '+(tr.sf2Name||'')):(tr.instrument===-1?'ドラム':GM_INSTRUMENTS[tr.instrument]||'プリセット');
   return `${i+1}: ${tr.name||('Track '+(i+1))} — ${name}`;
 }
 function tsSelectedOptions(){
@@ -5096,7 +5348,7 @@ function tsApplySettings(source, targetIdx, opts){
   const target=song.tracks[targetIdx]; if(!target||!source)return;
   const destinationFmSlot=Math.max(1,Math.min(16,target.fmMemorySlot||1));
   if(opts.instrument){
-    TRACK_SETTING_FIELDS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(source,k)) target[k]=tsClone(source[k]); else if(['timbreEvents','voiceSynthData','voiceSynthName'].includes(k)) delete target[k]; });
+    TRACK_SETTING_FIELDS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(source,k)) target[k]=tsClone(source[k]); else if(['timbreEvents','voiceSynthData','voiceSynthName','drumSynth'].includes(k)) delete target[k]; });
     if(source.instrumentType==='fm' && source.fmPreset){
       // Copy FM patch into the destination's assigned slot rather than changing the source slot.
       if(!song.fmMemory) song.fmMemory=Array.from({length:16},()=>defaultFmPreset());
@@ -5271,7 +5523,7 @@ function renderSynthPane(){
   const row = document.createElement('div'); row.className='listrow';
   if(tr.instrumentType==='synth') row.classList.add('selected');
   row.innerHTML = `<div style="display:flex;align-items:center;"><span class="dot"></span>Retro Synth</div>`;
-  row.onclick=()=>{ tr.instrumentType='synth'; delete periodicWaveCache[instPendingTrack]; renderSynthPane(); reschedulePlaybackNow(); };
+  row.onclick=()=>{ tr.instrumentType='synth'; document.getElementById('instWaveBtn').textContent='詳細'; delete periodicWaveCache[instPendingTrack]; renderSynthPane(); reschedulePlaybackNow(); };
   body.appendChild(row);
   const fmRow = document.createElement('div'); fmRow.className='listrow';
   if(tr.instrumentType==='fm') fmRow.classList.add('selected');
@@ -5284,7 +5536,7 @@ function renderSynthPane(){
         if(currentFmCount>=limit){ showToast('FM Synthを使えるトラック数の上限('+limit+')に達しています'); return; }
       }
     }
-    tr.instrumentType='fm';
+    tr.instrumentType='fm'; document.getElementById('instWaveBtn').textContent='詳細';
     renderSynthPane();
     reschedulePlaybackNow();
   };
@@ -5292,9 +5544,41 @@ function renderSynthPane(){
   const voiceRow = document.createElement('div'); voiceRow.className='listrow';
   if(tr.instrumentType==='voice') voiceRow.classList.add('selected');
   voiceRow.innerHTML = `<div style="display:flex;align-items:center;"><span class="dot"></span>Voice Synth</div>`;
-  voiceRow.onclick=()=>{ tr.instrumentType='voice'; renderSynthPane(); reschedulePlaybackNow(); updateVoiceEditButton(); };
+  voiceRow.onclick=()=>{ tr.instrumentType='voice'; document.getElementById('instWaveBtn').textContent='詳細'; renderSynthPane(); reschedulePlaybackNow(); updateVoiceEditButton(); };
   body.appendChild(voiceRow);
+  const utauRow=document.createElement('div'); utauRow.className='listrow';
+  if(tr.instrumentType==='utau') utauRow.classList.add('selected');
+  utauRow.innerHTML=`<div style="display:flex;align-items:center;"><span class="dot"></span>UTAU（歌声ライブラリ）</div><span class="sub">${utauBankName||'音源未読み込み'}</span>`;
+  utauRow.onclick=()=>{tr.instrumentType='utau';document.getElementById('instWaveBtn').textContent='音源';renderSynthPane();reschedulePlaybackNow();};
+  body.appendChild(utauRow);
+  const utauImport=document.createElement('button'); utauImport.className='menurow'; utauImport.style.width='100%'; utauImport.textContent='UTAU音源ZIPを読み込む';
+  utauImport.onclick=()=>document.getElementById('utauBankFile').click(); body.appendChild(utauImport);
+  const drumRow=document.createElement('div'); drumRow.className='listrow';
+  if(tr.instrumentType==='drumSynth') drumRow.classList.add('selected');
+  drumRow.innerHTML='<div style="display:flex;align-items:center;"><span class="dot"></span>Drum Synth（音作りできるドラム）</div><span class="sub">Kick / Snare / Hat など</span>';
+  drumRow.onclick=()=>{tr.instrumentType='drumSynth';tr.instrument=0;tr.drumSynth=tr.drumSynth||defaultDrumSynth();document.getElementById('instWaveBtn').textContent='音作り';renderSynthPane();reschedulePlaybackNow();};
+  body.appendChild(drumRow);
 }
+let drumSynthEditTrack=null;
+const DRUM_SYNTH_KEYS={kick:{pitch:55,decay:.32,tone:1800,noise:4},snare:{pitch:185,decay:.22,tone:6500,noise:72},closedHat:{pitch:420,decay:.08,tone:11000,noise:88},openHat:{pitch:360,decay:.55,tone:10000,noise:92},tom:{pitch:115,decay:.38,tone:3000,noise:12},crash:{pitch:260,decay:1.35,tone:12000,noise:96}};
+function currentDrumSound(){const tr=song.tracks[drumSynthEditTrack];if(!tr)return null;tr.drumSynth=tr.drumSynth||defaultDrumSynth();const key=document.getElementById('drumSoundSelect').value;return tr.drumSynth[key]||(tr.drumSynth[key]={...DRUM_SYNTH_KEYS[key]});}
+function refreshDrumSynthEditor(){const c=currentDrumSound();if(!c)return;for(const [key,label] of [['pitch','drumPitchVal'],['decay','drumDecayVal'],['tone','drumToneVal'],['noise','drumNoiseVal'],['gain','drumGainVal']]){const el=document.getElementById('drum'+key[0].toUpperCase()+key.slice(1)+'Slider');el.value=c[key];document.getElementById(label).textContent=key==='pitch'?Math.round(c[key])+' Hz':key==='decay'?Number(c[key]).toFixed(2)+' 秒':key==='tone'?Math.round(c[key])+' Hz':key==='gain'?Math.round(c[key])+'%':Math.round(c[key])+'%';}}
+function openDrumSynthEditor(trackIdx){drumSynthEditTrack=trackIdx;const tr=song.tracks[trackIdx];tr.drumSynth=tr.drumSynth||defaultDrumSynth();refreshDrumSynthEditor();openOverlay('drumSynthOverlay');}
+document.getElementById('drumSynthPreviewBtn').onclick=async()=>{
+  const tr=song.tracks[drumSynthEditTrack];if(!tr)return;
+  try{
+    ensureAudio();
+    if(actx.state==='suspended') await actx.resume();
+    const key=document.getElementById('drumSoundSelect').value;
+    const previewPitch={kick:36,snare:38,closedHat:42,openHat:46,tom:45,crash:49}[key]||36;
+    // drumSynthVoice reads the live settings from this track, so the current unsaved slider values are auditioned.
+    drumSynthVoice(drumSynthEditTrack,actx.currentTime+0.015,previewPitch,112,1.5,false);
+  }catch(err){console.warn('Drum Synth preview failed',err);showToast('プレビューを再生できませんでした');}
+};
+document.getElementById('drumSoundSelect').onchange=refreshDrumSynthEditor;
+[['pitch','drumPitchSlider'],['decay','drumDecaySlider'],['tone','drumToneSlider'],['noise','drumNoiseSlider'],['gain','drumGainSlider']].forEach(([key,id])=>{document.getElementById(id).addEventListener('input',()=>{const c=currentDrumSound();if(!c)return;c[key]=Number(document.getElementById(id).value);refreshDrumSynthEditor();reschedulePlaybackNow();});});
+document.getElementById('drumSynthResetBtn').onclick=()=>{const key=document.getElementById('drumSoundSelect').value;const tr=song.tracks[drumSynthEditTrack];if(!tr)return;tr.drumSynth=tr.drumSynth||defaultDrumSynth();tr.drumSynth[key]={...DRUM_SYNTH_KEYS[key]};refreshDrumSynthEditor();reschedulePlaybackNow();};
+
 document.getElementById('instCatSwitch').onclick=()=>{
   const body=document.getElementById('instCatBody'); body.innerHTML='';
   const allRow=document.createElement('div'); allRow.className='listrow'; allRow.textContent='- All -';
@@ -5310,13 +5594,14 @@ document.getElementById('instCatSwitch').onclick=()=>{
 document.getElementById('instOk').onclick=()=>{ closeOverlay('instOverlay'); updateTrackGridUI(); };
 document.getElementById('instCustomBtn').onclick=()=>{
   const tr = song.tracks[instPendingTrack];
-  if(tr.instrument===-1){ showToast('ドラムトラックではADSR設定を使用できません'); return; }
+  if(tr.instrument===-1 || tr.instrumentType==='drumSynth'){ showToast(tr.instrumentType==='drumSynth'?'Drum Synthは「音作り」から設定できます':'ドラムトラックではADSR設定を使用できません'); return; }
   openTrackEnvelopeDialog(instPendingTrack);
 };
 document.getElementById('instWaveBtn').onclick=()=>{
   const tr = song.tracks[instPendingTrack];
   if(tr.instrumentType==='voice') { openVoiceSynthEditor(); return; }
   if(tr.instrumentType==='fm') openFmSynthDialog(instPendingTrack);
+  else if(tr.instrumentType==='drumSynth') openDrumSynthEditor(instPendingTrack);
   else openWaveformEditor(instPendingTrack);
 };
 
@@ -5908,7 +6193,7 @@ function openTransposeDialog(){
     const dot=document.createElement('span'); dot.className='dot'; dot.style.background=tr.color||'#444';
     const name=document.createElement('span'); name.textContent=tr.name; name.style.flex='1';
     const sub=document.createElement('span'); sub.className='sub';
-    sub.textContent=tr.instrumentType==='voice'?'Voice Synth':tr.instrumentType==='fm'?'FM Synth':tr.instrumentType==='synth'?'Retro Synth':tr.instrumentType==='sf2'?'SF2':(tr.instrument===-1?'ドラム':String(tr.instrument).padStart(3,'0'));
+    sub.textContent=tr.instrumentType==='voice'?'Voice Synth':tr.instrumentType==='fm'?'FM Synth':tr.instrumentType==='synth'?'Retro Synth':tr.instrumentType==='drumSynth'?'Drum Synth':tr.instrumentType==='sf2'?'SF2':(tr.instrument===-1?'ドラム':String(tr.instrument).padStart(3,'0'));
     row.append(cb,dot,name,sub); list.appendChild(row);
   });
   renderTransposeAmount();
@@ -6009,6 +6294,9 @@ function updateTimesigLabel(){
 /* ---- Grid division dialog ---- */
 document.getElementById('rollGridDivBtn').onclick=()=>{
   const body=document.getElementById('gridDivBody'); body.innerHTML='';
+  const noneRow=document.createElement('div'); noneRow.className='listrow'+(song.gridDiv==='none'?' selected':'');
+  noneRow.innerHTML='<div style="display:flex;align-items:center;"><span class="dot"></span>グリッドなし（自由配置）</div>';
+  noneRow.onclick=()=>{song.gridDiv='none';closeOverlay('gridDivOverlay');drawGrid();}; body.appendChild(noneRow);
   GRID_DIVISIONS.forEach(g=>{
     const row=document.createElement('div'); row.className='listrow'+(song.gridDiv===g.id?' selected':'');
     row.innerHTML=`<div style="display:flex;align-items:center;"><span class="dot"></span>${g.label}</div>`;
@@ -6018,13 +6306,22 @@ document.getElementById('rollGridDivBtn').onclick=()=>{
   openOverlay('gridDivOverlay');
 };
 
+document.getElementById('quantizeNotesBtn').onclick=()=>{
+  if(song.gridDiv==='none'){showToast('グリッドなしではクオンタイズできません。先に分割を選んでね');return;}
+  const tr=song.tracks[song.activeTrack];
+  if(!selection.size){showToast('クオンタイズするノーツを選択してください');return;}
+  const before=snapshotNotes(),gt=gridTicks();let count=0;
+  tr.notes.forEach(n=>{if(!selection.has(n.id))return;n.startTick=Math.max(0,Math.round(n.startTick/gt)*gt);n.lengthTick=Math.max(gt,Math.round(n.lengthTick/gt)*gt);count++;});
+  pushUndoIfChanged(before);drawGrid();reschedulePlaybackNow();showToast(count+'個のノーツをグリッドにクオンタイズしました');
+};
+
 /* ---- Mixer ---- */
 function openMixer(){
   ensureAudio();
   const body = document.getElementById('mixerBody'); body.innerHTML='';
   song.tracks.forEach((tr,i)=>{
     const row = document.createElement('div'); row.className='mixch';
-    const instName = tr.instrumentType==='voice' ? 'Voice Synth' : tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : GM_INSTRUMENTS[tr.instrument]);
+    const instName = tr.instrumentType==='voice' ? 'Voice Synth' : tr.instrumentType==='fm' ? 'FM Synth' : tr.instrumentType==='synth' ? 'Retro Synth' : tr.instrumentType==='drumSynth' ? 'Drum Synth' : tr.instrumentType==='sf2' ? ('SF2: '+(tr.sf2Name||'Custom')) : (tr.instrument===-1 ? '(drums)' : GM_INSTRUMENTS[tr.instrument]);
     row.innerHTML = `
       <div class="bar ${i===song.activeTrack?'active':''}"></div>
       <div class="name">${i+1}</div>
@@ -6515,6 +6812,24 @@ function getRetroPeriodicWave(trackIdx){
   periodicWaveCache[trackIdx] = wave;
   return wave;
 }
+function drumSynthVoice(trackIdx,when,note,vel,dur,register){
+  const tr=song.tracks[trackIdx];tr.drumSynth=tr.drumSynth||defaultDrumSynth();
+  const key=drumSynthKeyForNote(note);
+  const c={...DRUM_SYNTH_KEYS[key],...(tr.drumSynth[key]||{})};const decay=Math.max(.035,Math.min(3,c.decay||.2)),tone=Math.max(100,Math.min(16000,c.tone||3000)),noiseAmt=Math.max(0,Math.min(1,(c.noise||0)/100));
+  const osc=actx.createOscillator(),og=actx.createGain(),ng=actx.createGain(),filter=actx.createBiquadFilter(),g=actx.createGain();
+  osc.type=key==='crash'||key==='closedHat'||key==='openHat'?'square':'sine';
+  const base=Math.max(20,Math.min(1500,c.pitch||100));osc.frequency.setValueAtTime(base,when);
+  if(key==='kick'||key==='tom'){osc.frequency.setValueAtTime(base*2.8,when);osc.frequency.exponentialRampToValueAtTime(Math.max(25,base*.55),when+Math.min(.12,decay*.45));}
+  filter.type=(key==='kick'||key==='tom')?'lowpass':'highpass';filter.frequency.setValueAtTime(tone,when);filter.Q.value=.7;
+  const peak=Math.max(.02,vel/127)*.42*Math.max(.5,Math.min(5,(Number(c.gain)||100)/100));g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(peak,when+.002);g.gain.exponentialRampToValueAtTime(.0001,when+decay);
+  og.gain.value=(1-noiseAmt);ng.gain.value=noiseAmt;
+  osc.connect(og);og.connect(filter);
+  const nb=actx.createBuffer(1,Math.max(1,Math.floor(actx.sampleRate*Math.min(3,decay+.03))),actx.sampleRate),nd=nb.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
+  const ns=actx.createBufferSource();ns.buffer=nb;ns.connect(ng);ng.connect(filter);filter.connect(g);g.connect(trackNodes[trackIdx].gain);
+  osc.start(when);ns.start(when);osc.stop(when+decay+.03);ns.stop(when+decay+.03);
+  const handle={src:osc,g,extraOscs:[ns]};osc.onended=()=>{activeVoices=activeVoices.filter(v=>v!==handle);};if(register)activeVoices.push(handle);return handle;
+}
+
 function retroSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato){
   const freq = midiToFreq(note);
   const osc = actx.createOscillator();
@@ -6834,9 +7149,16 @@ function triggerNote(trackIdx, when, note, vel, dur, register, pitchCurve, vibra
     try{ return fmSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato, getFmPresetForTrack(tr, noteTick||0)); }
     catch(err){ console.warn('FM synth voice failed, falling back', err); }
   }
+  if(tr.instrumentType==='drumSynth'){
+    try{ return drumSynthVoice(trackIdx,when,note,vel,dur,register); }catch(err){ console.warn('drum synth voice failed, falling back',err); }
+  }
   if(tr.instrumentType==='synth'){
     try{ return retroSynthVoice(trackIdx, when, note, vel, dur, register, pitchCurve, vibrato); }
     catch(err){ console.warn('retro synth voice failed, falling back', err); }
+  }
+  if(tr.instrumentType==='utau'){
+    try{ const h=utauVoice(trackIdx,when,note,vel,dur,register,pitchCurve,vibrato,noteTick,voiceChar); if(h) return h; }
+    catch(err){ console.warn('UTAU voice failed',err); }
   }
   if(tr.instrumentType==='voice'){
     try{
@@ -7056,8 +7378,28 @@ async function loadLastCustomSF2(){
 }
 
 let previewVoices=[]; // short one-shot preview notes (tap-select feedback, move-drag pitch preview) — force-stopped on gesture end
-function playPreview(trackIdx, pitch){
+let previewRequestId=0;
+async function playPreview(trackIdx, pitch){
   ensureAudio();
+  ++previewRequestId;
+  const requestId=previewRequestId;
+  // A new preview replaces the previous one. Do not let note-move previews
+  // accumulate and turn into overlapping/unpleasant chords.
+  stopAllPreviewVoices();
+  const tr=song.tracks[trackIdx];
+  if(tr?.instrumentType==='utau' && utauBank && utauWorldline){
+    const alias=utauAliasForLyric((tr.notes||[]).find(n=>n.pitch===pitch)?.lyric||'あ');
+    try{
+      const buffer=await getUtauAudioBuffer(alias,pitch,0.5);
+      if(requestId!==previewRequestId || !buffer || !actx || !trackNodes[trackIdx])return;
+      const src=actx.createBufferSource();src.buffer=buffer;
+      const g=actx.createGain();g.gain.value=1;src.connect(g);g.connect(trackNodes[trackIdx].gain);
+      const h={src,g};previewVoices.push(h);
+      src.onended=()=>{previewVoices=previewVoices.filter(v=>v!==h);};
+      src.start(actx.currentTime);
+    }catch(err){console.warn('UTAU preview failed',err);}
+    return;
+  }
   const h = triggerNote(trackIdx, actx.currentTime, pitch, 100, 0.5, false);
   if(h) previewVoices.push(h);
 }
@@ -7071,6 +7413,7 @@ function stopNotePreview(){ stopAllPreviewVoices(); }
 
 /* ---- transport / scheduling ---- */
 let playing=false, playheadTick=0, playStartTime=0, playStartTick=0, schedTimer=null;
+let playbackPrepareToken=0, playbackPreparing=false;
 let chordOnlyPlayback=false;
 const chordOnlyPlayBtn=document.getElementById('chordOnlyPlayBtn');
 if(chordOnlyPlayBtn) chordOnlyPlayBtn.addEventListener('click',()=>{
@@ -7170,8 +7513,11 @@ function updateFlagIdxLabel(){
   lbl.textContent = song.flags.length ? `旗${song.currentFlagIndex+1}/${song.flags.length}` : '旗-';
 }
 
-function startPlayback(fromTick){
+async function startPlayback(fromTick){
   ensureAudio();
+  if(playbackPreparing)return;
+  const myToken=++playbackPrepareToken;
+  playbackPreparing=true;
   // Re-enable echo for a new playback session after stopPlayback cut its tail.
   if(actx){
     const now=actx.currentTime;
@@ -7191,6 +7537,24 @@ function startPlayback(fromTick){
   activeBtn.classList.add('playing');
   activeBtn.textContent = activeBtn.id==='playBtn' ? '■' : activeBtn.textContent;
   playStartTick = Math.max(0, Math.round(fromTick));
+
+  // UTAU rendering is CPU-heavy and asynchronous. Do it BEFORE starting the
+  // transport clock so the piano-roll timeline and every UTAU AudioBuffer use
+  // the same AudioContext time origin. This removes render-time start delays
+  // and the corresponding shortening of notes that used to occur when the
+  // scheduler was already running.
+  try{
+    const prepStart = loopEnabled ? Math.min(playStartTick, Math.max(0,Math.round(loopStartTickVal))) : playStartTick;
+    await prepareUtauPlayback(prepStart,myToken);
+  }catch(err){
+    console.error('UTAU playback preparation failed',err);
+    showToast(`UTAU音声準備失敗: ${err?.message||err}`);
+    if(myToken===playbackPrepareToken)stopPlayback();
+    return;
+  }
+  if(myToken!==playbackPrepareToken || !playing){playbackPreparing=false;return;}
+
+  playbackPreparing=false;
   playStartTime = actx.currentTime + 0.05;
   activeVoices = [];
   buildScheduleQueue();
@@ -7200,6 +7564,8 @@ function startPlayback(fromTick){
   tickLoop();
 }
 function stopPlayback(){
+  ++playbackPrepareToken;
+  playbackPreparing=false;
   playing=false;
   document.getElementById('playBtn').classList.remove('playing');
   document.getElementById('playBtn').textContent='▶';
@@ -7221,7 +7587,7 @@ function stopPlayback(){
 /* used when tempo/instrument changes while playing: cut everything and restart scheduling
    from the current playhead position so the change is heard immediately */
 function reschedulePlaybackNow(){
-  if(!playing) return;
+  if(!playing || playbackPreparing) return;
   const resumeTick = Math.max(0, Math.round(playheadTick));
   stopAllVoices();
   playStartTick = resumeTick;
@@ -7682,7 +8048,330 @@ window.addEventListener('message',e=>{
   }
 });
 
+
+// UTAU single-note voicebank support. The ZIP is decoded and packed locally in-browser.
+let utauModule=null, utauBank=null, utauWorldline=null, utauBankName='', utauReadyPromise=null;
+const utauAudioCache=new Map();
+const utauBankInput=document.createElement('input'); utauBankInput.type='file'; utauBankInput.accept='.zip,application/zip'; utauBankInput.id='utauBankFile'; utauBankInput.style.display='none'; document.body.appendChild(utauBankInput);
+async function ensureUtauModules(){
+  if(utauModule)return utauModule;
+  const [koe,jszipMod]=await Promise.all([import('https://esm.sh/@onjmin/koe@1.0.11'),import('https://esm.sh/jszip@3.10.1')]);
+  utauModule={...koe,JSZip:jszipMod.default||jszipMod}; return utauModule;
+}
+function utauPathKey(s){return String(s||'').replace(/\\/g,'/').replace(/^\.\//,'').normalize('NFC').toLowerCase();}
+function utauDecodeZipName(bytes){
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes);}
+  catch(_){return new TextDecoder('shift_jis').decode(bytes);}
+}
+utauBankInput.addEventListener('change',async()=>{
+  const file=utauBankInput.files?.[0]; if(!file)return;
+  showToast('UTAU音源を読み込み中…');
+  let utauStage='ZIP展開';
+  try{
+    const lib=await ensureUtauModules();
+    // Legacy Japanese UTAU banks may have CP932 ZIP filenames.
+    // JSZip decodes those names before we build the path lookup tables.
+    const zip=await lib.JSZip.loadAsync(await file.arrayBuffer(),{decodeFileName:utauDecodeZipName});
+    const files=Object.entries(zip.files).filter(([name,entry])=>!entry.dir);
+    const otoFiles=files.filter(([name])=>name.toLowerCase().endsWith('/oto.ini')||name.toLowerCase()==='oto.ini');
+    if(!otoFiles.length)throw new Error('oto.iniが見つかりません');
+
+    const wavByPath=new Map(), wavByBase=new Map();
+    for(const [name,entry] of files){
+      if(!name.toLowerCase().endsWith('.wav'))continue;
+      wavByPath.set(utauPathKey(name),entry);
+      const basename=utauPathKey(name.split('/').pop());
+      if(!wavByBase.has(basename))wavByBase.set(basename,entry);
+    }
+
+    const inputs=[]; let otoCount=0, matchedCount=0;
+    utauStage='oto.ini解析・WAVデコード';
+
+    for(const [otoPath,otoEntry] of otoFiles){
+      const base=otoPath.slice(0,otoPath.lastIndexOf('/')+1);
+      const otoBytes=await otoEntry.async('uint8array');
+      const otoText=new TextDecoder('shift_jis').decode(otoBytes);
+
+      // Parse the filename on the LEFT side of '=' ourselves.
+      // This avoids parser-version/encoding ambiguity for legacy Shift-JIS oto.ini.
+      const entries=otoText.split(/\r?\n/).map(line=>{
+        const eq=line.indexOf('=');
+        if(eq<0)return null;
+        const wavFile=line.slice(0,eq).trim();
+        const fields=line.slice(eq+1).split(',');
+        const nums=fields.slice(1).map(v=>Number.parseFloat(v.trim()));
+        return {
+          file:wavFile,
+          alias:(fields[0]||'').trim(),
+          offset:Number.isFinite(nums[0])?nums[0]:0,
+          consonant:Number.isFinite(nums[1])?nums[1]:0,
+          cutoff:Number.isFinite(nums[2])?nums[2]:0,
+          preutterance:Number.isFinite(nums[3])?nums[3]:0,
+          overlap:Number.isFinite(nums[4])?nums[4]:0
+        };
+      }).filter(entry=>entry&&entry.file&&entry.alias);
+
+      otoCount+=entries.length;
+
+      for(const oto of entries){
+        const wavName=String(oto.file||'').replace(/\\/g,'/').trim();
+        const wavPath=base+wavName;
+        const wantedPath=utauPathKey(wavPath);
+        const wantedBase=utauPathKey(wavName.split('/').pop());
+        const wavEntry=
+          zip.file(wavPath) ||
+          wavByPath.get(wantedPath) ||
+          wavByBase.get(wantedBase);
+
+        if(!wavEntry)continue;
+        matchedCount++;
+
+        utauStage=`WAVデコード: ${wavName}`;
+        const wavBytes=await wavEntry.async('uint8array');
+
+        // Make a standalone ArrayBuffer. Some ZIP implementations return a
+        // Uint8Array whose backing buffer is larger than the actual WAV bytes.
+        const wavBuffer=new ArrayBuffer(wavBytes.byteLength);
+        new Uint8Array(wavBuffer).set(wavBytes);
+
+        // Decode with Web Audio rather than koe.parseWav so the browser owns
+        // WAV parsing and we never pass a non-ArrayBuffer/DataView target.
+        const decodeCtx=window.__utauDecodeContext ||
+          (window.__utauDecodeContext=new (window.AudioContext||window.webkitAudioContext)());
+        const decoded=await decodeCtx.decodeAudioData(wavBuffer);
+
+        const mono=new Float32Array(decoded.length);
+        if(decoded.numberOfChannels===1){
+          mono.set(decoded.getChannelData(0));
+        }else{
+          const channels=Array.from(
+            {length:decoded.numberOfChannels},
+            (_,ch)=>decoded.getChannelData(ch)
+          );
+          for(let n=0;n<decoded.length;n++){
+            let sum=0;
+            for(const channel of channels)sum+=channel[n];
+            mono[n]=sum/channels.length;
+          }
+        }
+
+        // Do not call lib.resample()/lib.normalizePcm() here.
+        // Those helpers have changed shape across koe builds and were the
+        // source of the previous "reading 'length' of undefined" failure.
+        const srcRate=Number(decoded.sampleRate)||48000;
+        const targetRate=48000;
+        const targetLength=Math.max(1,Math.round(mono.length*targetRate/srcRate));
+        const resampled=new Float32Array(targetLength);
+
+        if(srcRate===targetRate){
+          resampled.set(mono.subarray(0,targetLength));
+        }else{
+          const ratio=srcRate/targetRate;
+          for(let n=0;n<targetLength;n++){
+            const pos=n*ratio;
+            const left=Math.floor(pos);
+            const frac=pos-left;
+            const a=mono[Math.min(left,mono.length-1)]||0;
+            const b=mono[Math.min(left+1,mono.length-1)]||0;
+            resampled[n]=a+(b-a)*frac;
+          }
+        }
+
+        // koe.pack expects normalized Int16 PCM. Normalize each sample buffer
+        // locally and avoid depending on the helper's return type.
+        let peak=0;
+        for(let n=0;n<resampled.length;n++){
+          const a=Math.abs(resampled[n]);
+          if(a>peak)peak=a;
+        }
+        const pcm=new Int16Array(resampled.length);
+        const scale=peak>0?32767/peak:1;
+        for(let n=0;n<resampled.length;n++){
+          const v=Math.round(resampled[n]*scale);
+          pcm[n]=Math.max(-32768,Math.min(32767,v));
+        }
+
+        const recordedPitch=
+          typeof lib.pitchFromAliasSuffix==='function'
+            ? (lib.pitchFromAliasSuffix(oto.alias)||220)
+            : 220;
+
+        inputs.push({oto,pcm,recordedPitch});
+      }
+    }
+
+    if(!inputs.length){
+      throw new Error(`oto.iniの${otoCount}エントリ中、WAVを${matchedCount}件検出しましたが、デコード可能な音素が0件でした。`);
+    }
+
+    utauStage=`音源パック化（${inputs.length}/${otoCount}音素）`;
+    const packed=lib.pack(inputs,220);
+    const blob=lib.packKoe(packed.manifest,[packed.bin]);
+
+    utauStage='VoiceBank読込';
+    utauBank=await lib.VoiceBank.load(blob);
+
+    utauStage='WORLD音声合成エンジン読込';
+    utauWorldline=await lib.Worldline.load({
+      scriptUrl:'https://onjmin.github.io/koe/demo/world/worldline.js'
+    });
+
+    utauBankName=file.name.replace(/\.zip$/i,'');
+    utauAudioCache.clear();
+    song.tracks[song.activeTrack].instrumentType='utau';
+    renderSynthPane();
+    updateTrackGridUI();
+    reschedulePlaybackNow();
+    showToast(`UTAU音源を読み込みました（${inputs.length}/${otoCount}音素）`);
+  }catch(err){
+    console.error('UTAU load failed at stage:',utauStage,err);
+    showToast(`UTAU読み込み失敗［${utauStage}］: ${err?.message||err}`);
+  }finally{
+    utauBankInput.value='';
+  }
+});
+
+function utauAliasForLyric(lyric){
+  if(!utauBank)return null; const aliases=utauBank.manifest.phonemes||{};
+  const q=String(lyric||'あ').trim();
+  if(aliases[q])return q;
+  const fallback={'ん':'ん','っ':'っ','ー':'ー'};
+  if(fallback[q]&&aliases[fallback[q]])return fallback[q];
+  return aliases['あ']?'あ':Object.keys(aliases)[0]||null;
+}
+async function getUtauAudioBuffer(alias,note,dur){
+  if(!utauBank||!utauWorldline||!alias)return null;
+  const key=[alias,note,Math.round(dur*1000)].join('|');
+  const cached=utauAudioCache.get(key);
+  if(cached instanceof AudioBuffer)return cached;
+  if(cached && typeof cached.then==='function')return await cached;
+  const promise=(async()=>{
+    const entry=utauBank.manifest.phonemes[alias];
+    const pcm=await utauBank.getPcm(alias);
+    const lead=utauModule.leadInFromEntry(entry);
+    const rendered=utauWorldline.renderNote({
+      pcm,
+      pitch:midiToFreq(note),
+      durationMs:Math.max(40,dur*1000),
+      ...lead
+    });
+    if(!rendered)return null;
+    const sr=48000;
+    const buf=actx.createBuffer(1,rendered.length,sr);
+    buf.copyToChannel(rendered,0);
+    return buf;
+  })();
+  utauAudioCache.set(key,promise);
+  const result=await promise;
+  if(result)utauAudioCache.set(key,result);
+  return result;
+}
+function utauGraphemes(text){
+  const src=String(text||'').trim();
+  if(!src)return [];
+  // Only small kana that function as a contracted syllable are joined to
+  // the preceding kana. Normal kana must always start a new note.
+  // きゃ / きゅ / きょ, しゃ / しゅ / しょ, etc. => one unit.
+  // っ is kept as its own unit because it has its own UTAU alias/mora.
+  const smallKana=new Set(['ぁ','ぃ','ぅ','ぇ','ぉ','ゃ','ゅ','ょ','ゎ','ゕ','ゖ']);
+  const out=[];
+  for(let i=0;i<src.length;i++){
+    const ch=src[i];
+    if(smallKana.has(ch) && out.length){
+      out[out.length-1]+=ch;
+    }else{
+      out.push(ch);
+    }
+  }
+  return out;
+}
+function assignUtauLyricsFromText(startNote,text){
+  const tr=song.tracks[song.activeTrack];
+  if(!tr||tr.instrumentType!=='utau'||!startNote)return 0;
+  const units=utauGraphemes(text);
+  if(!units.length)return 0;
+  const notes=(tr.notes||[]).slice().sort((a,b)=>a.startTick-b.startTick||a.id-b.id);
+  const startTick=startNote.startTick;
+  const groups=[];
+  for(const n of notes){
+    if(n.startTick<startTick)continue;
+    let g=groups[groups.length-1];
+    if(!g || g.tick!==n.startTick){g={tick:n.startTick,notes:[]};groups.push(g);}
+    g.notes.push(n);
+  }
+  const count=Math.min(units.length,groups.length);
+  for(let i=0;i<count;i++)groups[i].notes.forEach(n=>n.lyric=units[i]);
+  return count;
+}
+async function prepareUtauPlayback(fromTick,token){
+  if(!utauBank||!utauWorldline)return;
+  const jobs=[];
+  song.tracks.forEach((tr,ti)=>{
+    if(tr.instrumentType!=='utau')return;
+    for(const nt of (tr.notes||[])){
+      if(nt.startTick < fromTick)continue;
+      const alias=utauAliasForLyric(nt.lyric||nt.voiceChar||'あ');
+      if(!alias)continue;
+      const dur=Math.max(0.01,tickSpanSeconds(nt.startTick,effectiveNoteEndTick(ti,nt)));
+      const key=[alias,nt.pitch,Math.round(dur*1000)].join('|');
+      const cached=utauAudioCache.get(key);
+      if(cached instanceof AudioBuffer)continue;
+      if(cached && typeof cached.then==='function'){
+        jobs.push(cached.then(buf=>({key,buf})));
+        continue;
+      }
+      const promise=getUtauAudioBuffer(alias,nt.pitch,dur);
+      jobs.push(promise.then(buf=>({key,buf})));
+    }
+  });
+  if(!jobs.length)return;
+  showToast(`UTAU音声を準備中… 0/${jobs.length}`);
+  for(let i=0;i<jobs.length;i++){
+    if(token!==playbackPrepareToken || !playing)throw new Error('再生準備がキャンセルされました');
+    const result=await jobs[i];
+    if(result && result.buf)utauAudioCache.set(result.key,result.buf);
+    if((i+1)%4===0 || i===jobs.length-1)showToast(`UTAU音声を準備中… ${i+1}/${jobs.length}`);
+  }
+}
+function utauVoice(trackIdx,when,note,vel,dur,register,pitchCurve,vibrato,noteTick,voiceChar){
+  if(!utauBank||!utauWorldline)return null;
+  const nt=song.tracks[trackIdx]?.notes?.find(n=>n.startTick===noteTick&&n.pitch===note);
+  const alias=utauAliasForLyric(nt?.lyric||voiceChar||'あ'); if(!alias)return null;
+  const key=[alias,note,Math.round(dur*1000)].join('|');
+  const buffer=utauAudioCache.get(key);
+  // Playback is intentionally synchronous here: startPlayback() has already
+  // rendered and cached every UTAU note needed for this transport position.
+  // Never wait for WORLD rendering inside the real-time scheduler.
+  if(!(buffer instanceof AudioBuffer))return null;
+  if(!actx||!trackNodes[trackIdx])return null;
+
+  const src=actx.createBufferSource();
+  src.buffer=buffer;
+  const g=actx.createGain();
+  g.gain.value=Math.max(0,Math.min(1.5,(vel??100)/100));
+  src.connect(g);g.connect(trackNodes[trackIdx].gain);
+
+  const startAt=Math.max(when,actx.currentTime+.002);
+  const late=Math.max(0,startAt-when);
+  // If the scheduler ever misses the exact WebAudio time, do not throw away
+  // the whole delayed prefix as the old implementation did. A normal render
+  // is already cached, so this path should be rare; keeping the full buffer
+  // avoids shortening the note merely because the main thread was busy.
+  const offset=Math.min(late,Math.max(0,buffer.duration-0.001));
+  const remaining=Math.max(0.005,dur-offset);
+  try{
+    src.start(startAt,offset);
+    src.stop(startAt+remaining+0.005);
+  }catch(e){console.warn('UTAU note schedule failed',e);return null;}
+  const handle={src,g};
+  if(register){
+    activeVoices.push(handle);
+    src.onended=()=>{activeVoices=activeVoices.filter(v=>v.src!==src);};
+  }
+  return handle;
+}
 window.addEventListener('load', init);
+
 </script>
 <script>
 if ("serviceWorker" in navigator) {
